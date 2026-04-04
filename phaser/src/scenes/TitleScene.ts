@@ -70,6 +70,24 @@ export class TitleScene extends Phaser.Scene {
       padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setDepth(2);
 
+    // Maid character on title screen — uses high-quality PNG
+    if (this.textures.exists('maid_idle')) {
+      const maidChar = this.add.image(CANVAS_W / 2, 360, 'maid_idle')
+        .setDisplaySize(120, 120).setDepth(2);
+
+      // Gentle float
+      this.tweens.add({
+        targets: maidChar, y: '+=8', duration: 1800,
+        yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+
+      // Breathing scale
+      this.tweens.add({
+        targets: maidChar, scaleY: maidChar.scaleY * 1.02,
+        duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    }
+
     // Knife decorations
     if (this.textures.exists('knife')) {
       const leftKnife = this.add.image(50, 190, 'knife').setScale(3).setAngle(-30).setDepth(2);

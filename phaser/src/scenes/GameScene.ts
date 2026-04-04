@@ -30,8 +30,10 @@ export class GameScene extends Phaser.Scene {
   private paddleY = BOTTOM_Y;
   private fireX = CANVAS_W / 2;
   private paddleContainer!: Phaser.GameObjects.Container;
-  private maidSprite!: Phaser.GameObjects.Image;
+  private maidSprite!: Phaser.GameObjects.Sprite;
   private traySprite!: Phaser.GameObjects.Image;
+  private currentMaidAnim = '';
+  maidBreathTween?: Phaser.Tweens.Tween;
   private aimLine!: Phaser.GameObjects.Graphics;
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private waitingKnivesContainer!: Phaser.GameObjects.Container;
@@ -70,19 +72,48 @@ export class GameScene extends Phaser.Scene {
     this.dragging = false;
     this.paddleDragging = false;
 
-    // Background
+    // Background image
+    if (this.textures.exists('bg')) {
+      this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg')
+        .setDisplaySize(CANVAS_W, CANVAS_H)
+        .setDepth(-1);
+    }
     this.bgGraphics = this.add.graphics();
     this.drawBackground();
+    this.cameras.main.setBackgroundColor('#0a0a0f');
 
     // Physics groups
     this.blocks = this.physics.add.staticGroup();
     this.movingBlocks = this.physics.add.group();
     this.knives = this.physics.add.group();
 
-    // Paddle setup
-    const maidKey = this.textures.exists('maid_idle') ? 'maid_idle' : 'maid_fallback';
-    this.maidSprite = this.add.image(0, -32, maidKey).setDisplaySize(60, 64);
-    this.traySprite = this.add.image(0, -PADDLE_Y_OFFSET, 'paddle_tray');
+    // Paddle setup — use individual PNG sprites
+    const hasIdlePng = this.textures.exists('maid_idle');
+    if (hasIdlePng) {
+      this.maidSprite = this.add.sprite(0, -42, 'maid_idle').setDisplaySize(70, 70);
+    } else {
+      this.maidSprite = this.add.sprite(0, -32, 'maid_fallback').setDisplaySize(60, 64);
+    }
+    this.currentMaidAnim = 'idle';
+
+    // Breathing tween — gentle scale pulse
+    this.maidBreathTween = this.tweens.add({
+      targets: this.maidSprite,
+      scaleY: this.maidSprite.scaleY * 1.03,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Paddle tray — from atlas if available
+    const hasAtlas = this.textures.exists('atlas');
+    if (hasAtlas) {
+      this.traySprite = this.add.image(0, -PADDLE_Y_OFFSET, 'atlas', 'paddle_tray')
+        .setDisplaySize(PADDLE_WIDTH, 12);
+    } else {
+      this.traySprite = this.add.image(0, -PADDLE_Y_OFFSET, 'paddle_tray');
+    }
     this.paddleContainer = this.add.container(this.paddleX, this.paddleY, [
       this.maidSprite,
       this.traySprite,
@@ -95,12 +126,15 @@ export class GameScene extends Phaser.Scene {
     this.waitingKnivesContainer = this.add.container(0, 0);
     this.updateWaitingKnives();
 
-    // Particle emitter
-    this.particleEmitter = this.add.particles(0, 0, 'particle', {
+    // Particle emitter — use atlas particle if available
+    const particleKey = hasAtlas ? 'atlas' : 'particle';
+    const particleFrame = hasAtlas ? 'particle_orange' : undefined;
+    this.particleEmitter = this.add.particles(0, 0, particleKey, {
+      frame: particleFrame,
       speed: { min: 60, max: 240 },
-      lifespan: 333,
+      lifespan: 400,
       alpha: { start: 1, end: 0 },
-      scale: 1,
+      scale: { start: 1.5, end: 0.5 },
       emitting: false,
     });
     this.particleEmitter.setDepth(5);
@@ -170,13 +204,13 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Update maid sprite state
-    if (this.state === GameState.SHOOTING) {
-      const throwKey = this.textures.exists('maid_throw') ? 'maid_throw' : 'maid_fallback';
-      if (this.maidSprite.texture.key !== throwKey) this.maidSprite.setTexture(throwKey);
-    } else {
-      const idleKey = this.textures.exists('maid_idle') ? 'maid_idle' : 'maid_fallback';
-      if (this.maidSprite.texture.key !== idleKey) this.maidSprite.setTexture(idleKey);
+    // Update maid texture based on game state
+    if (this.textures.exists('maid_idle') && this.currentMaidAnim !== 'hit') {
+      const targetTex = this.state === GameState.SHOOTING ? 'maid_throw' : 'maid_idle';
+      if (this.maidSprite.texture.key !== targetTex) {
+        this.maidSprite.setTexture(targetTex);
+        this.currentMaidAnim = this.state === GameState.SHOOTING ? 'throw' : 'idle';
+      }
     }
 
     // Waiting knives visibility
@@ -255,6 +289,24 @@ export class GameScene extends Phaser.Scene {
     this.knivesToShoot = this.knifeCount;
     this.fireX = this.paddleX;
 
+    // Switch to throw sprite with punch animation
+    if (this.textures.exists('maid_throw')) {
+      this.maidSprite.setTexture('maid_throw');
+      this.currentMaidAnim = 'throw';
+
+      // Throw lunge forward effect
+      const origY = this.maidSprite.y;
+      this.tweens.add({
+        targets: this.maidSprite,
+        y: origY - 8,
+        scaleX: this.maidSprite.scaleX * 1.1,
+        scaleY: this.maidSprite.scaleY * 1.1,
+        duration: 150,
+        yoyo: true,
+        ease: 'Back.easeOut',
+      });
+    }
+
     this.spawnTimer = this.time.addEvent({
       delay: SPAWN_INTERVAL,
       repeat: this.knivesToShoot - 1,
@@ -267,7 +319,11 @@ export class GameScene extends Phaser.Scene {
   private spawnKnife(): void {
     const x = this.fireX;
     const y = this.paddleY - PADDLE_Y_OFFSET;
-    const knife = this.knives.create(x, y, 'knife') as Phaser.Physics.Arcade.Sprite;
+    const hasAtlas = this.textures.exists('atlas');
+    const knife = hasAtlas
+      ? this.knives.create(x, y, 'atlas', 'knife_big') as Phaser.Physics.Arcade.Sprite
+      : this.knives.create(x, y, 'knife') as Phaser.Physics.Arcade.Sprite;
+    if (hasAtlas) knife.setDisplaySize(12, 24);
     knife.setData('isSmall', false);
     knife.setData('active', true);
     (knife.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
@@ -280,7 +336,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnMiniKnife(x: number, y: number, angle: number): void {
-    const knife = this.knives.create(x, y, 'mini_knife') as Phaser.Physics.Arcade.Sprite;
+    const hasAtlas = this.textures.exists('atlas');
+    const knife = hasAtlas
+      ? this.knives.create(x, y, 'atlas', 'knife_small') as Phaser.Physics.Arcade.Sprite
+      : this.knives.create(x, y, 'mini_knife') as Phaser.Physics.Arcade.Sprite;
+    if (hasAtlas) knife.setDisplaySize(8, 16);
     knife.setData('isSmall', true);
     knife.setData('active', true);
     (knife.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
@@ -457,6 +517,7 @@ export class GameScene extends Phaser.Scene {
         block.setData('hp', 0);
         this.hearts--;
         this.burstParticles(block.x, block.y, 0xef4444);
+        this.playHitReaction();
         const label = block.getData('label') as Phaser.GameObjects.Text | undefined;
         if (label) label.destroy();
         this.movingBlocks.remove(block, true, true);
@@ -504,6 +565,18 @@ export class GameScene extends Phaser.Scene {
     if (this.spawnTimer) this.spawnTimer.destroy();
     this.emitUIUpdate();
 
+    // Celebratory bounce with throw pose
+    this.maidSprite.setTexture('maid_throw');
+    this.currentMaidAnim = 'clear';
+    this.tweens.add({
+      targets: this.maidSprite,
+      y: this.maidSprite.y - 12,
+      duration: 300,
+      yoyo: true,
+      repeat: 2,
+      ease: 'Bounce.easeOut',
+    });
+
     this.events.emit('stageClear', this.level);
 
     this.clearTimer = this.time.delayedCall(1200, () => {
@@ -511,6 +584,7 @@ export class GameScene extends Phaser.Scene {
       initLevel(this, this.level);
       this.state = GameState.AIMING;
       this.paddleX = CANVAS_W / 2;
+      this.currentMaidAnim = '';
       this.updateWaitingKnives();
       this.emitUIUpdate();
     });
@@ -521,6 +595,19 @@ export class GameScene extends Phaser.Scene {
     if (this.spawnTimer) this.spawnTimer.destroy();
     this.knives.clear(true, true);
     this.emitUIUpdate();
+
+    // Sad idle pose + shake
+    this.maidSprite.setTexture('maid_idle');
+    this.currentMaidAnim = 'gameover';
+    this.maidSprite.setTint(0x888888);
+    this.tweens.add({
+      targets: this.maidSprite,
+      x: this.maidSprite.x - 3,
+      duration: 80,
+      yoyo: true,
+      repeat: 5,
+    });
+
     this.events.emit('gameOver', this.score, this.level, this.hearts);
   }
 
@@ -528,29 +615,63 @@ export class GameScene extends Phaser.Scene {
     this.hearts = HEARTS_MAX;
     this.state = GameState.AIMING;
     this.paddleX = CANVAS_W / 2;
+    this.currentMaidAnim = 'idle';
+    this.maidSprite.clearTint();
+    this.maidSprite.setAlpha(1);
+    if (this.textures.exists('maid_idle')) this.maidSprite.setTexture('maid_idle');
     initLevel(this, this.level);
     this.updateWaitingKnives();
     this.emitUIUpdate();
     this.events.emit('restart');
   }
 
+  private playHitReaction(): void {
+    this.currentMaidAnim = 'hit';
+
+    // Flash red tint
+    this.maidSprite.setTint(0xff4444);
+
+    // Screen shake
+    this.cameras.main.shake(150, 0.01);
+
+    // Flash between throw and idle rapidly
+    let flashCount = 0;
+    const flashTimer = this.time.addEvent({
+      delay: 100,
+      repeat: 5,
+      callback: () => {
+        flashCount++;
+        if (flashCount % 2 === 0) {
+          this.maidSprite.setTexture('maid_idle');
+          this.maidSprite.setAlpha(0.5);
+        } else {
+          this.maidSprite.setTexture('maid_throw');
+          this.maidSprite.setAlpha(1);
+        }
+      },
+    });
+
+    // Restore after flash
+    this.time.delayedCall(600, () => {
+      flashTimer.destroy();
+      this.maidSprite.clearTint();
+      this.maidSprite.setAlpha(1);
+      this.maidSprite.setTexture('maid_idle');
+      this.currentMaidAnim = 'idle';
+    });
+  }
+
   // --- Helpers ---
 
   private drawBackground(): void {
-    // Arena floor
-    this.bgGraphics.fillStyle(0x0e0e16);
+    // Dim overlay on top of bg image for readability
+    this.bgGraphics.fillStyle(0x000000, 0.3);
     this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    this.bgGraphics.fillStyle(0xffffff);
-    this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    this.bgGraphics.setDepth(0);
 
-    // Decorative bricks
-    this.bgGraphics.lineStyle(2, 0xf1f5f9);
-    for (let i = 0; i < 30; i++) {
-      const x = Math.random() * CANVAS_W;
-      const y = Math.random() * CANVAS_H;
-      const w = 20 + Math.random() * 30;
-      this.bgGraphics.strokeRect(x, y, w, 15);
-    }
+    // Arena border glow
+    this.bgGraphics.lineStyle(2, 0x3730a3, 0.5);
+    this.bgGraphics.strokeRect(1, 1, CANVAS_W - 2, CANVAS_H - 2);
   }
 
   private burstParticles(x: number, y: number, tint: number): void {
@@ -561,10 +682,13 @@ export class GameScene extends Phaser.Scene {
   private updateWaitingKnives(): void {
     this.waitingKnivesContainer.removeAll(true);
     const count = Math.min(this.knifeCount, 12);
-    const spacing = 5;
+    const spacing = 6;
     const offsetX = -((count - 1) * spacing) / 2;
+    const hasAtlas = this.textures.exists('atlas');
     for (let i = 0; i < count; i++) {
-      const knifeImg = this.add.image(offsetX + i * spacing, 0, 'knife').setScale(0.6);
+      const knifeImg = hasAtlas
+        ? this.add.image(offsetX + i * spacing, 0, 'atlas', 'knife_small').setDisplaySize(6, 12)
+        : this.add.image(offsetX + i * spacing, 0, 'knife').setScale(0.6);
       this.waitingKnivesContainer.add(knifeImg);
     }
   }

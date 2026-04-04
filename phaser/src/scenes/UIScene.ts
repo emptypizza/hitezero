@@ -20,6 +20,7 @@ export class UIScene extends Phaser.Scene {
   private overlayTitle!: Phaser.GameObjects.Text;
   private overlayInfo!: Phaser.GameObjects.Text;
   private overlaySubInfo!: Phaser.GameObjects.Text;
+  private overlayChibi?: Phaser.GameObjects.Sprite;
   private gameScene!: GameScene;
 
   constructor() {
@@ -29,11 +30,11 @@ export class UIScene extends Phaser.Scene {
   create(data: { gameScene: GameScene }): void {
     this.gameScene = data.gameScene;
 
-    // Top bar background
+    // Top bar background — dark theme
     const topBar = this.add.graphics();
-    topBar.fillStyle(0xffffff);
+    topBar.fillStyle(0x111118);
     topBar.fillRect(0, 0, CANVAS_W, TOP_BAR_HEIGHT);
-    topBar.lineStyle(3, 0x000000);
+    topBar.lineStyle(2, 0x3730a3, 0.6);
     topBar.beginPath();
     topBar.moveTo(0, TOP_BAR_HEIGHT);
     topBar.lineTo(CANVAS_W, TOP_BAR_HEIGHT);
@@ -51,7 +52,7 @@ export class UIScene extends Phaser.Scene {
       fontFamily: 'monospace',
       fontSize: '22px',
       fontStyle: 'bold',
-      color: '#000000',
+      color: '#e2e8f0',
     }).setOrigin(0.5);
 
     // Stars left
@@ -82,6 +83,12 @@ export class UIScene extends Phaser.Scene {
       fontSize: '16px',
       color: '#ffffff',
     }).setOrigin(0.5).setDepth(11).setVisible(false);
+
+    // Chibi character for overlays (from PM39X atlas)
+    if (this.textures.exists('maid_chibi')) {
+      this.overlayChibi = this.add.sprite(CANVAS_W / 2, CANVAS_H / 2 + 110, 'maid_chibi', 'chibi_1')
+        .setDisplaySize(60, 96).setDepth(11).setVisible(false);
+    }
 
     // Exit button
     const exitBtn = this.add.text(CANVAS_W - 10, 8, '\u2716', {
@@ -132,6 +139,15 @@ export class UIScene extends Phaser.Scene {
     this.overlayInfo.setText(`\ub2e4\uc74c \ub808\ubca8: ${level + 1}`).setVisible(true);
     this.overlaySubInfo.setVisible(false);
 
+    if (this.overlayChibi) {
+      this.overlayChibi.setVisible(true);
+      if (this.anims.exists('chibi_anim_clear')) this.overlayChibi.play('chibi_anim_clear');
+      this.tweens.add({
+        targets: this.overlayChibi, y: this.overlayChibi.y - 8,
+        duration: 400, yoyo: true, repeat: 2, ease: 'Bounce.easeOut',
+      });
+    }
+
     this.time.delayedCall(1100, () => {
       this.hideOverlay();
     });
@@ -142,6 +158,15 @@ export class UIScene extends Phaser.Scene {
     this.overlayTitle.setText('GAME OVER').setColor('#EF4444').setVisible(true);
     this.overlayInfo.setText('\ud130\uce58\ud558\uc5ec \ud604\uc7ac \ub808\ubca8 \uc7ac\uc2dc\uc791').setVisible(true);
     this.overlaySubInfo.setVisible(false);
+
+    if (this.overlayChibi) {
+      this.overlayChibi.setVisible(true);
+      if (this.anims.exists('chibi_anim_gameover')) this.overlayChibi.play('chibi_anim_gameover');
+      this.tweens.add({
+        targets: this.overlayChibi, x: this.overlayChibi.x - 2,
+        duration: 100, yoyo: true, repeat: 3,
+      });
+    }
   }
 
   private onRestart(): void {
@@ -160,5 +185,6 @@ export class UIScene extends Phaser.Scene {
     this.overlayTitle.setVisible(false);
     this.overlayInfo.setVisible(false);
     this.overlaySubInfo.setVisible(false);
+    if (this.overlayChibi) this.overlayChibi.setVisible(false);
   }
 }

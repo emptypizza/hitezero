@@ -1,0 +1,97 @@
+{
+  "frames": {
+    "maid_big_1": {
+      "frame": { "x": 16, "y": 52, "w": 120, "h": 160 }
+    },
+    "maid_big_2": {
+      "frame": { "x": 140, "y": 52, "w": 120, "h": 160 }
+    },
+    "maid_big_3": {
+      "frame": { "x": 264, "y": 52, "w": 120, "h": 160 }
+    },
+    "maid_big_4": {
+      "frame": { "x": 388, "y": 52, "w": 120, "h": 160 }
+    },
+    "maid_small_1": {
+      "frame": { "x": 32, "y": 228, "w": 96, "h": 120 }
+    },
+    "maid_small_2": {
+      "frame": { "x": 148, "y": 228, "w": 96, "h": 120 }
+    },
+    "maid_small_3": {
+      "frame": { "x": 268, "y": 228, "w": 96, "h": 120 }
+    },
+    "maid_small_4": {
+      "frame": { "x": 388, "y": 228, "w": 96, "h": 120 }
+    },
+    "knife_big": {
+      "frame": { "x": 580, "y": 100, "w": 48, "h": 96 }
+    },
+    "knife_big_alt": {
+      "frame": { "x": 640, "y": 48, "w": 48, "h": 96 }
+    },
+    "knife_small": {
+      "frame": { "x": 720, "y": 100, "w": 32, "h": 64 }
+    },
+    "knife_small_alt": {
+      "frame": { "x": 770, "y": 48, "w": 32, "h": 64 }
+    },
+    "block_normal": {
+      "frame": { "x": 260, "y": 395, "w": 96, "h": 96 }
+    },
+    "block_pow_dark": {
+      "frame": { "x": 460, "y": 375, "w": 96, "h": 96 }
+    },
+    "block_pow_lit": {
+      "frame": { "x": 568, "y": 375, "w": 96, "h": 96 }
+    },
+    "block_star_dim": {
+      "frame": { "x": 260, "y": 500, "w": 96, "h": 96 }
+    },
+    "block_star_bright": {
+      "frame": { "x": 368, "y": 500, "w": 96, "h": 96 }
+    },
+    "block_star_glow": {
+      "frame": { "x": 476, "y": 500, "w": 96, "h": 96 }
+    },
+    "block_red_enemy": {
+      "frame": { "x": 688, "y": 375, "w": 96, "h": 96 }
+    },
+    "block_red_enemy_alt": {
+      "frame": { "x": 688, "y": 500, "w": 96, "h": 96 }
+    },
+    "hp_label_1": {
+      "frame": { "x": 50, "y": 390, "w": 64, "h": 28 }
+    },
+    "hp_label_2": {
+      "frame": { "x": 50, "y": 424, "w": 64, "h": 28 }
+    },
+    "hp_label_2b": {
+      "frame": { "x": 50, "y": 502, "w": 64, "h": 28 }
+    },
+    "hp_label_3": {
+      "frame": { "x": 50, "y": 538, "w": 64, "h": 28 }
+    },
+    "paddle_tray": {
+      "frame": { "x": 30, "y": 670, "w": 220, "h": 48 }
+    },
+    "brick_tile": {
+      "frame": { "x": 330, "y": 660, "w": 200, "h": 64 }
+    },
+    "particle_red": {
+      "frame": { "x": 598, "y": 680, "w": 16, "h": 16 }
+    },
+    "particle_green": {
+      "frame": { "x": 620, "y": 680, "w": 16, "h": 16 }
+    },
+    "particle_orange": {
+      "frame": { "x": 642, "y": 664, "w": 16, "h": 16 }
+    },
+    "icon_knife": {
+      "frame": { "x": 710, "y": 660, "w": 40, "h": 80 }
+    },
+    "icon_star": {
+      "frame": { "x": 780, "y": 670, "w": 48, "h": 48 }
+    }
+  }
+}
