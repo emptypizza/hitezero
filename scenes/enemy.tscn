@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=3 uid="uid://b2enemy000001"]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_enemy"]
+radius = 14.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hitbox"]
+radius = 16.0
+
+[node name="Enemy" type="CharacterBody2D" groups=["enemies"]]
+collision_layer = 2
+collision_mask = 5
+script = ExtResource("1_enemy")
+
+[node name="Sprite" type="Polygon2D" parent="."]
+color = Color(0.86, 0.27, 0.37, 1)
+polygon = PackedVector2Array(0, -14, 12, -6, 12, 6, 0, 14, -12, 6, -12, -6)
+
+[node name="CollisionShape" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_enemy")
+
+[node name="Hitbox" type="Area2D" parent="."]
+collision_layer = 2
+collision_mask = 1
+
+[node name="HitboxShape" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("CircleShape2D_hitbox")

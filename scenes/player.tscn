@@ -1,0 +1,58 @@
+[gd_scene load_steps=5 format=3 uid="uid://b1player00001"]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
+size = Vector2(30, 30)
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_attack"]
+radius = 22.0
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hurtbox"]
+size = Vector2(28, 28)
+
+[node name="Player" type="CharacterBody2D" groups=["player"]]
+collision_layer = 1
+collision_mask = 2
+script = ExtResource("1_player")
+
+[node name="Sprite" type="Polygon2D" parent="."]
+color = Color(0.2, 0.6, 1.0, 1)
+polygon = PackedVector2Array(-14, -16, 14, -16, 16, -14, 16, 14, 14, 16, -14, 16, -16, 14, -16, -14)
+
+[node name="CollisionShape" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_player")
+
+[node name="AttackArea" type="Area2D" parent="."]
+collision_layer = 4
+collision_mask = 2
+
+[node name="AttackShape" type="CollisionShape2D" parent="AttackArea"]
+position = Vector2(30, 0)
+disabled = true
+shape = SubResource("CircleShape2D_attack")
+
+[node name="AttackVisual" type="Polygon2D" parent="AttackArea"]
+position = Vector2(30, 0)
+color = Color(1.0, 0.95, 0.4, 0.7)
+polygon = PackedVector2Array(-12, -18, 12, -18, 18, 0, 12, 18, -12, 18)
+visible = false
+
+[node name="Hurtbox" type="Area2D" parent="."]
+collision_layer = 1
+collision_mask = 2
+
+[node name="HurtboxShape" type="CollisionShape2D" parent="Hurtbox"]
+shape = SubResource("RectangleShape2D_hurtbox")
+
+[node name="InvincibilityTimer" type="Timer" parent="."]
+one_shot = true
+
+[node name="AttackTimer" type="Timer" parent="."]
+one_shot = true
+
+[node name="AttackDurationTimer" type="Timer" parent="."]
+one_shot = true
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
