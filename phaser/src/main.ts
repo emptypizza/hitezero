@@ -5,9 +5,11 @@ import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
 import { UIScene } from './scenes/UIScene';
+import { CRTPostFX } from './helpers/CRTPostFX';
+import { GlowPostFX } from './helpers/GlowPostFX';
 
 const config: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
+  type: Phaser.WEBGL,
   parent: 'app',
   backgroundColor: '#ffffff',
   scale: {
@@ -25,6 +27,10 @@ const config: Phaser.Types.Core.GameConfig = {
   },
   input: {
     activePointers: 2,
+  },
+  pipeline: {
+    CRTPostFX,
+    GlowPostFX,
   },
   scene: [BootScene, TitleScene, GameScene, UIScene],
 };
