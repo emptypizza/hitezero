@@ -1,0 +1,27 @@
+; Engine configuration file.
+; Edited manually for the Phaser -> Godot migration.
+
+config_version=5
+
+[application]
+
+config/name="HiteZero Godot"
+run/main_scene="res://scenes/boot.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Session="*res://scripts/session.gd"
+
+[display]
+
+window/size/viewport_width=400
+window/size/viewport_height=700
+window/stretch/mode="viewport"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

@@ -704,7 +704,7 @@ function GameCanvas({ onExit }) {
         ctx.fillStyle = '#000000';
         ctx.font = 'bold 22px monospace';
         ctx.textAlign = 'center';
-        let ballStr = eng.ballCount < 10 ? `0${eng.ballCount}` : eng.ballCount;
+        let ballStr = eng.ballCount < 10 ? `0${eng.ballCount}` : String(eng.ballCount);
         ctx.fillText(`🗡️${ballStr}/99`, CANVAS_W / 2, 35);
         const starCount = eng.blocks.filter(b => b.type === 'STAR').length;
         ctx.fillStyle = '#FBBF24'; 
@@ -753,6 +753,11 @@ function GameCanvas({ onExit }) {
           ctx.fillStyle = '#FBBF24';
           ctx.font = 'bold 14px sans-serif';
           ctx.fillText('POW', b.x + b.w / 2, b.y + b.h / 2 + 2);
+        }
+        if (b.type === 'STAR') {
+          ctx.fillStyle = '#FBBF24';
+          ctx.font = 'bold 22px sans-serif';
+          ctx.fillText('★', b.x + b.w / 2, b.y + b.h / 2 + 2);
         }
       });
     };
@@ -990,7 +995,7 @@ function GameCanvas({ onExit }) {
     const scaleY = CANVAS_H / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
-    eng.pointerCanvasX = x;
+    eng.pointerCanvasX = Math.max(20, Math.min(CANVAS_W - 20, x));
 
     if (eng.state === 'AIMING' && eng.dragging) {
       const dx = x - eng.startPos.x;
