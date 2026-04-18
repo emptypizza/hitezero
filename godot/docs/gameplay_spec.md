@@ -1,6 +1,6 @@
-# Phaser Parity Spec
+# Gameplay Spec
 
-This document freezes the current Phaser gameplay contract before the Godot port.
+This document captures the current gameplay contract for the Godot version of HiteZero.
 
 ## Core Constants
 - Logical viewport: `400x700`
@@ -15,10 +15,9 @@ This document freezes the current Phaser gameplay contract before the Godot port
 - Grid columns: `7`
 
 ## Scene Flow
-1. `Boot` preloads assets and generated fallback textures.
-2. `Title` shows title UI, instructions, and the start button.
-3. `Game` owns world state and launches a separate `UI` overlay scene.
-4. `UI` mirrors game state from emitted events and handles return-to-title / debug UI.
+1. `Boot` immediately forwards to the title screen.
+2. `Title` shows start, help, and best score UI.
+3. `Game` owns the world state and instantiates the HUD.
 
 ## Game State Machine
 - `AIMING`
@@ -36,7 +35,7 @@ This document freezes the current Phaser gameplay contract before the Godot port
   - After `1.2s`, the next level is generated and the game returns to `AIMING`.
 - `GAME_OVER`
   - Triggered when all knives are inactive and no stars were cleared, or when hearts reach zero.
-  - Tapping/clicking restarts the current level.
+  - Tapping or clicking restarts the current level.
 
 ## Input Contract
 - Keyboard:
@@ -112,12 +111,8 @@ This document freezes the current Phaser gameplay contract before the Godot port
   - Return to title
   - Toggle collider debug visualization
 
-## Visual / FX Expectations
+## Visual Expectations
 - Neon arena frame and grid background
 - Simple impact feedback on hits
 - Hit reaction on heart loss
-- CRT / glow post-processing is desirable, but not part of stage-1 parity
-
-## Asset Reality For The Port
-- The Phaser code references several assets that are not currently present in the repository checkout.
-- The Godot migration must remain playable with procedural placeholder visuals and optional asset upgrades later.
+- Optional post-processing can be layered in later if web performance allows

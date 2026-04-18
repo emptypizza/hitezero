@@ -1,5 +1,5 @@
 ; Engine configuration file.
-; Edited manually for the Phaser -> Godot migration.
+; Main HiteZero Godot project.
 
 config_version=5
 

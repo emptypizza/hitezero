@@ -1,7 +1,7 @@
 Original prompt: Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.
 
 ## Completed
-- Created a parallel `godot/` project for the Phaser -> Godot migration.
+- Created the `godot/` project as the main game implementation.
 - Added boot, title, game, HUD, player, knife, block, level generator, and session scripts/scenes.
 - Ported the core gameplay loop with manual knife collision and stage progression.
 - Added migration docs under `godot/docs/`.
@@ -27,11 +27,10 @@ Original prompt: Implement the plan as specified, it is attached for your refere
 - The build script now also produces `hitezero-godot-web-site_nothreads.zip` alongside the unpacked site folder.
 
 ## Notes
-- Phaser remains in place intentionally until browser validation is complete.
-- Current Godot visuals use lightweight placeholder drawing instead of the missing Phaser art assets.
+- Current Godot visuals use lightweight placeholder drawing instead of depending on imported art assets.
 - The local verification server is expected at `http://127.0.0.1:8123/index.html` when serving `build/godot-web/site_nothreads/`.
 
 ## Remaining TODOs
 - Root-cause the Godot 4.6 `--export-release Web ...` preset configuration error. Current evidence suggests the pack-based path is stable while full release export is not.
 - Run manual browser QA for drag aiming, paddle dragging during shooting, and mobile touch feel.
-- Compare runtime feel against the Phaser parity spec before removing the Phaser implementation.
+- Compare runtime feel against `godot/docs/gameplay_spec.md`.

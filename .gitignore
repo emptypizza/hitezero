@@ -1,8 +1,4 @@
-# Web (Vite / Phaser)
-phaser/node_modules/
-phaser/dist/
-pj0zero/node_modules/
-pj0zero/dist/
+# Godot
 godot/.godot/
 godot/build/
 build/
