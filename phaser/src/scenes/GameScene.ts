@@ -57,6 +57,9 @@ export class GameScene extends Phaser.Scene {
   // Tutorial
   private tutorialText!: Phaser.GameObjects.Text;
 
+  // Post-processing
+  private crtApplied = false;
+
   constructor() {
     super({ key: 'Game' });
   }
@@ -164,6 +167,12 @@ export class GameScene extends Phaser.Scene {
     // Generate level
     initLevel(this, this.level);
     this.emitUIUpdate();
+
+    // Apply CRT scanline + glow post-processing (WebGL only)
+    if (!this.crtApplied && this.renderer.type === Phaser.WEBGL) {
+      this.cameras.main.setPostPipeline(['CRTPostFX', 'GlowPostFX']);
+      this.crtApplied = true;
+    }
   }
 
   update(_time: number, _delta: number): void {
@@ -664,14 +673,31 @@ export class GameScene extends Phaser.Scene {
   // --- Helpers ---
 
   private drawBackground(): void {
-    // Dim overlay on top of bg image for readability
-    this.bgGraphics.fillStyle(0x000000, 0.3);
+    // Dim overlay — slightly more transparent so bg shows through
+    this.bgGraphics.fillStyle(0x050510, 0.25);
     this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
     this.bgGraphics.setDepth(0);
 
-    // Arena border glow
-    this.bgGraphics.lineStyle(2, 0x3730a3, 0.5);
+    // Neon arena border (cyan glow, double stroke for glow feel)
+    this.bgGraphics.lineStyle(4, 0x00ffff, 0.15);
+    this.bgGraphics.strokeRect(3, 3, CANVAS_W - 6, CANVAS_H - 6);
+    this.bgGraphics.lineStyle(2, 0x00ffff, 0.4);
     this.bgGraphics.strokeRect(1, 1, CANVAS_W - 2, CANVAS_H - 2);
+
+    // Subtle grid lines for arena feel
+    this.bgGraphics.lineStyle(1, 0x1a1a3a, 0.3);
+    for (let y = TOP_BAR_HEIGHT; y < CANVAS_H; y += 40) {
+      this.bgGraphics.beginPath();
+      this.bgGraphics.moveTo(0, y);
+      this.bgGraphics.lineTo(CANVAS_W, y);
+      this.bgGraphics.strokePath();
+    }
+    for (let x = 0; x < CANVAS_W; x += 40) {
+      this.bgGraphics.beginPath();
+      this.bgGraphics.moveTo(x, TOP_BAR_HEIGHT);
+      this.bgGraphics.lineTo(x, CANVAS_H);
+      this.bgGraphics.strokePath();
+    }
   }
 
   private burstParticles(x: number, y: number, tint: number): void {

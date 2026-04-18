@@ -190,26 +190,96 @@ function Particles() {
 function KnifeIcon({ color, rotation = 0 }) {
   return (
     <svg width="40" height="40" viewBox="0 0 100 100" className="drop-shadow-lg" style={{ transform: `rotate(${rotation}deg)` }}>
-      {/* 칼날 */}
       <polygon points="50,5 60,50 50,55 40,50" fill={color} />
       <polygon points="50,5 60,50 50,45" fill="white" opacity="0.3" />
-      {/* 가드 */}
       <rect x="35" y="52" width="30" height="6" rx="2" fill="#4B5563" />
-      {/* 손잡이 */}
       <rect x="44" y="58" width="12" height="30" rx="3" fill="#92400E" />
       <rect x="46" y="60" width="8" height="26" rx="2" fill="#B45309" opacity="0.5" />
     </svg>
   );
 }
 
-// --- 게임 플레이 캔버스 (물리 엔진 및 렌더링) ---
+// --- [변경] 게임 상수: 캔버스·블록·물리 한곳에 정리 ---
 const CANVAS_W = 400;
 const CANVAS_H = 700;
 const BOTTOM_Y = 620;
+const UI_TOP_H = 50;
 const BALL_SPEED = 12;
 const BLOCK_COLS = 7;
 const BLOCK_W = CANVAS_W / BLOCK_COLS;
 const BLOCK_H = BLOCK_W;
+const PADDLE_SPEED = 7;
+const PADDLE_WIDTH = 80;
+const MAID_CHAR_W = 60;
+const MAID_CHAR_H = 72;
+const MAID_ANIM_FPS = 10;
+const MAID_FRAME_INTERVAL = Math.round(60 / MAID_ANIM_FPS);
+const STAGE_CLEAR_HOLD_FRAMES = 55;
+const PADDLE_LERP = 0.42;
+const MAX_PARTICLES = 220;
+const ATLAS_SRC = '/assets/sprite-atlas.jpg';
+
+// [변경] 아틀라스 프레임 좌표 (phaser/public/assets/atlas.json 과 동일)
+const ATLAS_FRAMES = {
+  maid_big_1: { x: 16, y: 52, w: 120, h: 160 },
+  maid_big_2: { x: 140, y: 52, w: 120, h: 160 },
+  maid_big_3: { x: 264, y: 52, w: 120, h: 160 },
+  maid_big_4: { x: 388, y: 52, w: 120, h: 160 },
+  maid_small_1: { x: 32, y: 228, w: 96, h: 120 },
+  maid_small_2: { x: 148, y: 228, w: 96, h: 120 },
+  maid_small_3: { x: 268, y: 228, w: 96, h: 120 },
+  maid_small_4: { x: 388, y: 228, w: 96, h: 120 },
+  knife_big: { x: 580, y: 100, w: 48, h: 96 },
+  knife_small: { x: 720, y: 100, w: 32, h: 64 },
+  block_normal: { x: 260, y: 395, w: 96, h: 96 },
+  block_pow_dark: { x: 460, y: 375, w: 96, h: 96 },
+  block_pow_lit: { x: 568, y: 375, w: 96, h: 96 },
+  block_star_dim: { x: 260, y: 500, w: 96, h: 96 },
+  block_star_bright: { x: 368, y: 500, w: 96, h: 96 },
+  block_star_glow: { x: 476, y: 500, w: 96, h: 96 },
+  block_red_enemy: { x: 688, y: 375, w: 96, h: 96 },
+  block_red_enemy_alt: { x: 688, y: 500, w: 96, h: 96 },
+  paddle_tray: { x: 30, y: 670, w: 220, h: 48 },
+  brick_tile: { x: 330, y: 660, w: 200, h: 64 },
+  particle_red: { x: 598, y: 680, w: 16, h: 16 },
+  particle_green: { x: 620, y: 680, w: 16, h: 16 },
+  particle_orange: { x: 642, y: 664, w: 16, h: 16 },
+  icon_knife: { x: 710, y: 660, w: 40, h: 80 },
+  icon_star: { x: 780, y: 670, w: 48, h: 48 },
+};
+
+/**
+ * [변경] 스프라이트 시트: 아틀라스에서 잘라 그리기
+ */
+class SpriteSheet {
+  constructor(image) {
+    this.image = image;
+  }
+
+  getFrame(name) {
+    return ATLAS_FRAMES[name] || null;
+  }
+
+  /** 소스 프레임을 (dx,dy)에 (dw,dh) 크기로 그림 */
+  drawFrame(ctx, name, dx, dy, dw, dh) {
+    const f = this.getFrame(name);
+    if (!f || !this.image?.complete) return false;
+    ctx.drawImage(this.image, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+    return true;
+  }
+
+  /** 회전(라디안): 블레이드 중심 기준 */
+  drawFrameRotated(ctx, name, cx, cy, dw, dh, rotation) {
+    const f = this.getFrame(name);
+    if (!f || !this.image?.complete) return false;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotation);
+    ctx.drawImage(this.image, f.x, f.y, f.w, f.h, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+    return true;
+  }
+}
 
 function GameCanvas({ onExit }) {
   const canvasRef = React.useRef(null);
@@ -233,16 +303,22 @@ function GameCanvas({ onExit }) {
     hearts: 3,
     keys: { left: false, right: false }, 
     tutorialTimer: 0,
+    atlas: null,
+    atlasReady: false,
+    spriteSheet: null,
+    screenShake: 0,
+    stageClearTimer: 0,
+    pointerCanvasX: CANVAS_W / 2,
+    maidFrame: 0,
   });
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     const eng = engineRef.current;
     let animationId;
     let running = true;
 
-    // --- ✨ 줄 생성 로직 (호이스팅을 위해 상단 배치) ---
     const generateRow = (yPos = 60, isInit = false) => {
       for (let i = 0; i < BLOCK_COLS; i++) {
         if (Math.random() > 0.4) {
@@ -267,14 +343,15 @@ function GameCanvas({ onExit }) {
       }
     };
 
-    // --- ✨ 외부 클릭 핸들러에서도 재시작할 수 있도록 engineRef에 함수 바인딩 ---
     eng.initLevel = (level) => {
       eng.blocks = [];
       eng.balls = [];
       eng.ballsToShoot = 0;
       eng.pendingStars = 0;
       eng.tutorialTimer = 0;
-      eng.startPos.x = CANVAS_W / 2; // 재시작 시 콩퍼스(패들)를 중앙으로 원복
+      eng.stageClearTimer = 0;
+      eng.screenShake = 0;
+      eng.startPos.x = CANVAS_W / 2;
       
       const rows = 3 + Math.floor(level / 2);
       for(let r = 0; r < rows; r++) {
@@ -292,33 +369,51 @@ function GameCanvas({ onExit }) {
     };
 
     const initGame = () => {
-      eng.bgBricks = Array.from({ length: 30 }).map(() => ({
-        x: Math.random() * CANVAS_W, y: Math.random() * CANVAS_H,
-        w: 20 + Math.random() * 30, h: 15
+      eng.bgBricks = Array.from({ length: 24 }).map(() => ({
+        x: Math.random() * (CANVAS_W - 40), y: Math.random() * (CANVAS_H - 80),
+        w: 28 + Math.random() * 36, h: 18 + Math.random() * 22
       }));
 
-      // --- 메이드 캐릭터 스프라이트 로딩 ---
-      eng.sprites = {};
-      const idleImg = new Image();
-      idleImg.src = '/assets/maid_idle.png';
-      eng.sprites.idle = idleImg;
-      const throwImg = new Image();
-      throwImg.src = '/assets/maid_throw.png';
-      eng.sprites.throw = throwImg;
+      const atlas = new Image();
+      atlas.src = ATLAS_SRC;
+      atlas.onload = () => {
+        eng.atlas = atlas;
+        eng.atlasReady = true;
+        eng.spriteSheet = new SpriteSheet(atlas);
+      };
+      eng.atlas = atlas;
 
       eng.initLevel(eng.level);
     };
 
-    const addParticles = (x, y, color) => {
-      for (let i = 0; i < 8; i++) {
+    /** 파티클 색 → 아틀라스 프레임 이름 */
+    const particleFrameForColor = (color) => {
+      if (color === '#EF4444' || color === '#f00') return 'particle_red';
+      if (color === '#4ADE80') return 'particle_green';
+      return 'particle_orange';
+    };
+
+    const addParticles = (x, y, color, count = 10) => {
+      const frame = particleFrameForColor(color);
+      const cap = MAX_PARTICLES;
+      let start = eng.particles.length;
+      if (start + count > cap) {
+        eng.particles.splice(0, start + count - cap);
+        start = eng.particles.length;
+      }
+      for (let i = 0; i < count; i++) {
         eng.particles.push({
           x, y,
-          vx: (Math.random() - 0.5) * 8,
-          vy: (Math.random() - 0.5) * 8,
+          vx: (Math.random() - 0.5) * 10,
+          vy: (Math.random() - 0.5) * 10,
           life: 1.0,
-          color: color
+          frame,
         });
       }
+    };
+
+    const bumpShake = (amount) => {
+      eng.screenShake = Math.min(eng.screenShake + amount, 28);
     };
 
     const resolveCollision = (ball, block) => {
@@ -356,238 +451,318 @@ function GameCanvas({ onExit }) {
       return false;
     };
 
-    const update = () => {
-      if (!running) return;
-      eng.frameCount++;
+    /** [변경] 메이드 idle / throw 애니메이션 프레임 갱신 (약 10fps) */
+    const updateMaidAnimation = () => {
+      if (eng.frameCount % MAID_FRAME_INTERVAL === 0) {
+        eng.maidFrame = (eng.maidFrame + 1) % 4;
+      }
+    };
 
-      if (eng.state === 'STAGE_CLEAR') {
-        eng.tutorialTimer++;
-        if (eng.tutorialTimer > 18) {
-          eng.level++;
-          eng.initLevel(eng.level);
-        }
+    /** [변경] 스테이지 클리어: 타이머만큼 대기 후 다음 레벨 */
+    const updateStageClear = () => {
+      if (eng.state !== 'STAGE_CLEAR') return;
+      eng.stageClearTimer++;
+      if (eng.stageClearTimer >= STAGE_CLEAR_HOLD_FRAMES) {
+        eng.level++;
+        eng.initLevel(eng.level);
+      }
+    };
+
+    /** 패들 위치: 키보드 + (슈팅 중) 포인터 타깃 보간 */
+    const updatePaddle = () => {
+      if (eng.state === 'STAGE_CLEAR') return;
+
+      if (eng.keys.left) eng.startPos.x -= PADDLE_SPEED;
+      if (eng.keys.right) eng.startPos.x += PADDLE_SPEED;
+
+      if (eng.state === 'SHOOTING' && eng.paddleDragging) {
+        eng.startPos.x += (eng.pointerCanvasX - eng.startPos.x) * PADDLE_LERP;
       }
 
-      const PADDLE_SPEED = 7;
-      if (eng.keys.left && eng.state !== 'STAGE_CLEAR') eng.startPos.x -= PADDLE_SPEED;
-      if (eng.keys.right && eng.state !== 'STAGE_CLEAR') eng.startPos.x += PADDLE_SPEED;
-      
       eng.startPos.x = Math.max(20, Math.min(CANVAS_W - 20, eng.startPos.x));
+      eng.pointerCanvasX = Math.max(20, Math.min(CANVAS_W - 20, eng.pointerCanvasX));
+    };
 
-      if (eng.state === 'SHOOTING') {
-        
-        eng.blocks.forEach(b => {
-          if (b.type === 'RED_ENEMY') {
-            b.y += 0.5; 
-            
-            if (b.y + b.h > BOTTOM_Y - 20 && b.hp > 0) {
-              b.hp = 0; 
-              eng.hearts--;
-              addParticles(b.x + b.w / 2, b.y + b.h, '#EF4444');
-              if (eng.hearts <= 0) eng.state = 'GAME_OVER';
-            }
+    /** 빨간 적 블록 하강 */
+    const updateRedEnemyBlocks = () => {
+      if (eng.state !== 'SHOOTING') return;
+      eng.blocks.forEach(b => {
+        if (b.type === 'RED_ENEMY') {
+          b.y += 0.5; 
+          if (b.y + b.h > BOTTOM_Y - 20 && b.hp > 0) {
+            b.hp = 0; 
+            eng.hearts--;
+            addParticles(b.x + b.w / 2, b.y + b.h, '#EF4444', 14);
+            bumpShake(14);
+            if (eng.hearts <= 0) eng.state = 'GAME_OVER';
           }
+        }
+      });
+    };
+
+    const spawnBallsFromQueue = () => {
+      if (eng.state !== 'SHOOTING') return;
+      if (eng.ballsToShoot > 0 && eng.frameCount % 4 === 0) {
+        eng.balls.push({
+          x: eng.firePos.x,
+          y: eng.firePos.y - 76,
+          vx: Math.cos(eng.aimAngle) * BALL_SPEED,
+          vy: Math.sin(eng.aimAngle) * BALL_SPEED,
+          radius: 5,
+          active: true,
+          isSmall: false,
+          drawAngle: eng.aimAngle + Math.PI / 2,
         });
+        eng.ballsToShoot--;
+      }
+    };
 
-        if (eng.ballsToShoot > 0 && eng.frameCount % 4 === 0) {
-          eng.balls.push({
-            x: eng.firePos.x,
-            y: eng.firePos.y - 76,
-            vx: Math.cos(eng.aimAngle) * BALL_SPEED,
-            vy: Math.sin(eng.aimAngle) * BALL_SPEED,
-            radius: 5,
-            active: true,
-            isSmall: false
-          });
-          eng.ballsToShoot--;
-        }
+    /** [변경] 나이프 회전: 목표 각도로 부드럽게 보간 */
+    const smoothKnifeRotation = (b) => {
+      const target = Math.atan2(b.vy, b.vx) + Math.PI / 2;
+      if (b.drawAngle === undefined) b.drawAngle = target;
+      let diff = target - b.drawAngle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      b.drawAngle += diff * 0.28;
+    };
 
-        let allInactive = true;
-        
-        for (let step = 0; step < 2; step++) {
-          for (let i = 0; i < eng.balls.length; i++) {
-            let b = eng.balls[i];
-            if (!b.active) continue;
-            allInactive = false;
+    const stepBall = (b) => {
+      if (!b.active) return;
+      b.x += b.vx / 2;
+      b.y += b.vy / 2;
 
-            b.x += b.vx / 2;
-            b.y += b.vy / 2;
+      if (b.x < b.radius) { b.x = b.radius; b.vx = Math.abs(b.vx); }
+      if (b.x > CANVAS_W - b.radius) { b.x = CANVAS_W - b.radius; b.vx = -Math.abs(b.vx); }
+      if (b.y < UI_TOP_H + b.radius) { b.y = UI_TOP_H + b.radius; b.vy = Math.abs(b.vy); }
 
-            if (b.x < b.radius) { b.x = b.radius; b.vx = Math.abs(b.vx); }
-            if (b.x > CANVAS_W - b.radius) { b.x = CANVAS_W - b.radius; b.vx = -Math.abs(b.vx); }
-            if (b.y < 50 + b.radius) { b.y = 50 + b.radius; b.vy = Math.abs(b.vy); }
+      if (Math.abs(b.vy) < 0.3) b.vy = b.vy >= 0 ? 0.3 : -0.3;
 
-            if (Math.abs(b.vy) < 0.3) b.vy = b.vy >= 0 ? 0.3 : -0.3;
-
-            if (b.vy > 0) { 
-              const px = eng.startPos.x;
-              const py = eng.startPos.y;
-              const paddleWidth = 80;
-              
-              if (b.y + b.radius >= py - 76 && b.y - b.radius <= py - 64) {
-                if (b.x >= px - paddleWidth / 2 && b.x <= px + paddleWidth / 2) {
-                  const hitPoint = b.x - px;
-                  const normalizedHit = hitPoint / (paddleWidth / 2); 
-                  const maxBounceAngle = Math.PI / 2.5; 
-                  const bounceAngle = normalizedHit * maxBounceAngle;
-                  
-                  const currentSpeed = Math.sqrt(b.vx*b.vx + b.vy*b.vy);
-                  
-                  b.vx = Math.sin(bounceAngle) * currentSpeed;
-                  b.vy = -Math.cos(bounceAngle) * currentSpeed;
-                  b.y = py - 76 - b.radius;
-                  
-                  addParticles(b.x, b.y, '#4ADE80');
-                }
-              }
-            }
-
-            if (b.y >= BOTTOM_Y) {
-              b.y = BOTTOM_Y;
-              b.active = false;
-            }
-
-            for (let j = 0; j < eng.blocks.length; j++) {
-              let block = eng.blocks[j];
-              if (block.hp > 0 && resolveCollision(b, block)) {
-                block.hp--;
-                addParticles(b.x, b.y, block.type === 'NORMAL' ? '#000' : '#FBBF24');
-                
-                if (block.hp <= 0) {
-                  if (block.type === 'STAR') {
-                    eng.pendingStars++;
-                  } else if (block.type === 'POW') {
-                    for (let k = 0; k < 8; k++) {
-                      let angle = (k / 8) * Math.PI * 2;
-                      eng.balls.push({
-                        x: block.x + block.w / 2,
-                        y: block.y + block.h / 2,
-                        vx: Math.cos(angle) * BALL_SPEED * 0.6,
-                        vy: Math.sin(angle) * BALL_SPEED * 0.6,
-                        radius: 5,
-                        active: true,
-                        isSmall: true
-                      });
-                    }
-                  }
-                }
-              }
-            }
+      if (b.vy > 0) { 
+        const px = eng.startPos.x;
+        const py = eng.startPos.y;
+        if (b.y + b.radius >= py - 76 && b.y - b.radius <= py - 64) {
+          if (b.x >= px - PADDLE_WIDTH / 2 && b.x <= px + PADDLE_WIDTH / 2) {
+            const hitPoint = b.x - px;
+            const normalizedHit = hitPoint / (PADDLE_WIDTH / 2); 
+            const maxBounceAngle = Math.PI / 2.5; 
+            const bounceAngle = normalizedHit * maxBounceAngle;
+            const currentSpeed = Math.sqrt(b.vx*b.vx + b.vy*b.vy);
+            b.vx = Math.sin(bounceAngle) * currentSpeed;
+            b.vy = -Math.cos(bounceAngle) * currentSpeed;
+            b.y = py - 76 - b.radius;
+            addParticles(b.x, b.y, '#4ADE80', 8);
           }
         }
-
-        eng.blocks = eng.blocks.filter(b => b.hp > 0);
-
-        const starsLeft = eng.blocks.filter(b => b.type === 'STAR').length;
-
-        // --- ✨ 별(목표)을 모두 파괴하면 즉시 클리어 ---
-        if (starsLeft === 0) {
-          eng.balls = []; // 화면에 남은 공 즉시 제거
-          eng.ballCount += eng.pendingStars;
-          eng.pendingStars = 0;
-          eng.tutorialTimer = 0; // STAGE_CLEAR 대기 타이머 초기화
-          eng.state = 'STAGE_CLEAR';
-        }
-        // --- ✨ 목표를 달성하지 못했는데 모든 공이 떨어지면 게임 오버 ---
-        else if (allInactive && eng.ballsToShoot === 0) {
-          eng.balls = []; 
-          eng.pendingStars = 0; 
-          eng.state = 'GAME_OVER';
-        }
-      } else if (eng.state !== 'STAGE_CLEAR') {
-        eng.tutorialTimer = 0; 
       }
 
-      eng.particles.forEach(p => {
-        p.x += p.vx; p.y += p.vy;
-        p.life -= 0.05;
-      });
-      eng.particles = eng.particles.filter(p => p.life > 0);
+      if (b.y >= BOTTOM_Y) {
+        b.y = BOTTOM_Y;
+        b.active = false;
+      }
 
+      smoothKnifeRotation(b);
+    };
+
+    const handleBallBlockHits = (b) => {
+      for (let j = 0; j < eng.blocks.length; j++) {
+        let block = eng.blocks[j];
+        if (block.hp > 0 && resolveCollision(b, block)) {
+          block.hp--;
+          const hitColor = block.type === 'NORMAL' ? '#000' : '#FBBF24';
+          addParticles(b.x, b.y, hitColor, 12);
+          bumpShake(5);
+          
+          if (block.hp <= 0) {
+            addParticles(block.x + block.w/2, block.y + block.h/2, '#FBBF24', 16);
+            bumpShake(8);
+            if (block.type === 'STAR') {
+              eng.pendingStars++;
+            } else if (block.type === 'POW') {
+              for (let k = 0; k < 8; k++) {
+                let angle = (k / 8) * Math.PI * 2;
+                eng.balls.push({
+                  x: block.x + block.w / 2,
+                  y: block.y + block.h / 2,
+                  vx: Math.cos(angle) * BALL_SPEED * 0.6,
+                  vy: Math.sin(angle) * BALL_SPEED * 0.6,
+                  radius: 5,
+                  active: true,
+                  isSmall: true,
+                  drawAngle: angle + Math.PI / 2,
+                });
+              }
+            }
+          }
+        }
+      }
+    };
+
+    const updateBalls = () => {
+      if (eng.state !== 'SHOOTING') return;
+
+      spawnBallsFromQueue();
+
+      let allInactive = true;
+      for (let step = 0; step < 2; step++) {
+        for (let i = 0; i < eng.balls.length; i++) {
+          let b = eng.balls[i];
+          if (!b.active) continue;
+          allInactive = false;
+          stepBall(b);
+          handleBallBlockHits(b);
+        }
+      }
+
+      eng.blocks = eng.blocks.filter(b => b.hp > 0);
+
+      const starsLeft = eng.blocks.filter(b => b.type === 'STAR').length;
+
+      if (starsLeft === 0) {
+        eng.balls = []; 
+        eng.ballCount += eng.pendingStars;
+        eng.pendingStars = 0;
+        eng.stageClearTimer = 0;
+        eng.state = 'STAGE_CLEAR';
+      }
+      else if (allInactive && eng.ballsToShoot === 0) {
+        eng.balls = []; 
+        eng.pendingStars = 0; 
+        eng.state = 'GAME_OVER';
+      }
+    };
+
+    const updateParticles = () => {
+      const next = [];
+      for (let i = 0; i < eng.particles.length; i++) {
+        const p = eng.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.045;
+        if (p.life > 0) next.push(p);
+      }
+      eng.particles = next;
+    };
+
+    const decayShake = () => {
+      eng.screenShake *= 0.88;
+      if (eng.screenShake < 0.2) eng.screenShake = 0;
+    };
+
+    /** 배경 타일 + UI 영역 흰색 바 */
+    const drawBackground = (sheet) => {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      ctx.strokeStyle = '#F1F5F9';
-      ctx.lineWidth = 2;
-      eng.bgBricks.forEach(b => {
-        ctx.strokeRect(b.x, b.y, b.w, b.h);
-      });
+      if (sheet && eng.atlasReady) {
+        eng.bgBricks.forEach(br => {
+          sheet.drawFrame(ctx, 'brick_tile', br.x, br.y, br.w, br.h);
+        });
+      } else {
+        ctx.strokeStyle = '#F1F5F9';
+        ctx.lineWidth = 2;
+        eng.bgBricks.forEach(b => {
+          ctx.strokeRect(b.x, b.y, b.w, b.h);
+        });
+      }
 
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, CANVAS_W, 50);
+      ctx.fillRect(0, 0, CANVAS_W, UI_TOP_H);
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(0, 50); ctx.lineTo(CANVAS_W, 50); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, UI_TOP_H); ctx.lineTo(CANVAS_W, UI_TOP_H); ctx.stroke();
+    };
 
-      ctx.fillStyle = '#EF4444';
-      ctx.font = '24px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('♥'.repeat(Math.max(0, eng.hearts)), 15, 35);
+    /** [변경] 하트(아틀라스 입자), 나이프/별 아이콘 + 숫자 */
+    const drawUI = (sheet) => {
+      const iconY = 8;
+      if (sheet && eng.atlasReady) {
+        let hx = 12;
+        for (let h = 0; h < eng.hearts; h++) {
+          sheet.drawFrame(ctx, 'particle_red', hx, iconY + 6, 14, 14);
+          hx += 18;
+        }
+        sheet.drawFrame(ctx, 'icon_knife', CANVAS_W / 2 - 52, iconY, 22, 44);
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 20px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        let ballStr = eng.ballCount < 10 ? `0${eng.ballCount}` : String(eng.ballCount);
+        ctx.fillText(ballStr, CANVAS_W / 2 - 22, 26);
 
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 22px monospace';
+        const starCount = eng.blocks.filter(b => b.type === 'STAR').length;
+        sheet.drawFrame(ctx, 'icon_star', CANVAS_W - 88, iconY + 2, 28, 28);
+        ctx.fillStyle = '#FBBF24';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`목표 ${starCount}`, CANVAS_W - 54, 26);
+      } else {
+        ctx.fillStyle = '#EF4444';
+        ctx.font = '24px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('♥'.repeat(Math.max(0, eng.hearts)), 15, 35);
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 22px monospace';
+        ctx.textAlign = 'center';
+        let ballStr = eng.ballCount < 10 ? `0${eng.ballCount}` : String(eng.ballCount);
+        ctx.fillText(`🗡️${ballStr}/99`, CANVAS_W / 2, 35);
+        const starCount = eng.blocks.filter(b => b.type === 'STAR').length;
+        ctx.fillStyle = '#FBBF24'; 
+        ctx.font = 'bold 18px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`목표: ⭐ ${starCount}`, CANVAS_W - 15, 33);
+      }
       ctx.textAlign = 'center';
-      let ballStr = eng.ballCount < 10 ? `0${eng.ballCount}` : eng.ballCount;
-      ctx.fillText(`🗡️${ballStr}/99`, CANVAS_W / 2, 35);
+      ctx.textBaseline = 'middle';
+    };
 
-      const starCount = eng.blocks.filter(b => b.type === 'STAR').length;
-      ctx.fillStyle = '#FBBF24'; 
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`목표: ⭐ ${starCount}`, CANVAS_W - 15, 33);
+    const blockFrameName = (b) => {
+      const t = eng.frameCount;
+      if (b.type === 'NORMAL') return 'block_normal';
+      if (b.type === 'POW') return (Math.floor(t / 20) % 2 === 0) ? 'block_pow_dark' : 'block_pow_lit';
+      if (b.type === 'STAR') {
+        const c = Math.floor(t / 15) % 3;
+        if (c === 0) return 'block_star_dim';
+        if (c === 1) return 'block_star_bright';
+        return 'block_star_glow';
+      }
+      if (b.type === 'RED_ENEMY') return (Math.floor(t / 18) % 2 === 0) ? 'block_red_enemy' : 'block_red_enemy_alt';
+      return 'block_normal';
+    };
 
+    const drawBlocks = (sheet) => {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       eng.blocks.forEach(b => {
-        if (b.type === 'NORMAL') {
+        const name = blockFrameName(b);
+        if (sheet && eng.atlasReady) {
+          sheet.drawFrame(ctx, name, b.x, b.y, b.w, b.h);
+        } else {
           ctx.fillStyle = '#FFFFFF';
           ctx.fillRect(b.x, b.y, b.w, b.h);
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(b.x, b.y, b.w, b.h);
-          ctx.fillStyle = '#000000';
-          ctx.font = 'bold 20px sans-serif';
-          ctx.fillText(b.hp, b.x + b.w / 2, b.y + b.h / 2 + 2);
-        } else if (b.type === 'POW') {
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(b.x, b.y, b.w, b.h);
-          ctx.fillStyle = '#FBBF24';
-          ctx.font = 'bold 16px sans-serif';
-          ctx.fillText('POW', b.x + b.w / 2, b.y + b.h / 2 + 2);
-        } else if (b.type === 'STAR') {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(b.x, b.y, b.w, b.h);
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(b.x, b.y, b.w, b.h);
-          ctx.fillStyle = '#FBBF24';
-          ctx.font = '24px sans-serif';
-          ctx.fillText('★', b.x + b.w / 2, b.y + b.h / 2 + 2);
-        } else if (b.type === 'RED_ENEMY') {
-          ctx.fillStyle = '#EF4444'; 
-          ctx.fillRect(b.x, b.y, b.w, b.h);
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(b.x, b.y, b.w, b.h);
-          
-          ctx.strokeStyle = '#000000';
+          ctx.strokeStyle = '#000';
           ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(b.x + 8, b.y + 12); ctx.lineTo(b.x + 20, b.y + 18); ctx.stroke(); 
-          ctx.beginPath(); ctx.moveTo(b.x + b.w - 8, b.y + 12); ctx.lineTo(b.x + b.w - 20, b.y + 18); ctx.stroke(); 
-          
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(b.x + 10, b.y + 18, 8, 8); 
-          ctx.fillRect(b.x + b.w - 18, b.y + 18, 8, 8); 
+          ctx.strokeRect(b.x, b.y, b.w, b.h);
+        }
+        if (b.type === 'NORMAL' || b.type === 'RED_ENEMY') {
           ctx.fillStyle = '#000000';
-          ctx.fillRect(b.x + 12, b.y + 20, 4, 4); 
-          ctx.fillRect(b.x + b.w - 16, b.y + 20, 4, 4); 
-          
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = 'bold 16px sans-serif';
-          ctx.fillText(b.hp, b.x + b.w / 2, b.y + b.h - 10);
+          ctx.font = 'bold 18px sans-serif';
+          ctx.fillText(b.hp, b.x + b.w / 2, b.y + b.h / 2 + 2);
+        }
+        if (b.type === 'POW') {
+          ctx.fillStyle = '#FBBF24';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.fillText('POW', b.x + b.w / 2, b.y + b.h / 2 + 2);
+        }
+        if (b.type === 'STAR') {
+          ctx.fillStyle = '#FBBF24';
+          ctx.font = 'bold 22px sans-serif';
+          ctx.fillText('★', b.x + b.w / 2, b.y + b.h / 2 + 2);
         }
       });
+    };
 
+    const drawAimLine = () => {
       if (eng.state === 'AIMING' && eng.dragging) {
         ctx.strokeStyle = '#FBBF24';
         ctx.lineWidth = 3;
@@ -598,197 +773,169 @@ function GameCanvas({ onExit }) {
         ctx.stroke();
         ctx.setLineDash([]);
       }
+    };
 
+    const drawTutorialHint = () => {
       if (eng.state === 'SHOOTING' && eng.level <= 2 && Math.floor(eng.frameCount / 30) % 2 === 0) {
         ctx.fillStyle = '#4ADE80';
-        ctx.font = 'bold 18px sans-serif';
+        ctx.font = 'bold 16px sans-serif';
         ctx.fillText('좌우(방향키, A/D)로 나이프를 튕겨내세요!', CANVAS_W / 2, CANVAS_H / 2 + 100);
       }
+    };
 
-      // --- 나이프(투사체) 렌더링 ---
+    const drawBalls = (sheet) => {
+      const mainW = 14, mainH = 28;
+      const smallW = 11, smallH = 22;
       eng.balls.forEach(b => {
         if (!b.active) return;
-        ctx.save();
-        ctx.translate(b.x, b.y);
-        // 진행 방향에 따라 나이프 회전
-        const angle = Math.atan2(b.vy, b.vx);
-        ctx.rotate(angle + Math.PI / 2);
-        
-        if (!b.isSmall) {
-          // 메인 나이프
-          ctx.fillStyle = '#C0C0C0';
-          ctx.beginPath();
-          ctx.moveTo(0, -10);
-          ctx.lineTo(3, 2);
-          ctx.lineTo(-3, 2);
-          ctx.closePath();
-          ctx.fill();
-          // 하이라이트
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.moveTo(0, -10);
-          ctx.lineTo(1.5, 0);
-          ctx.lineTo(-0.5, 0);
-          ctx.closePath();
-          ctx.fill();
-          ctx.globalAlpha = 0.5;
-          ctx.fill();
-          ctx.globalAlpha = 1.0;
-          // 가드
-          ctx.fillStyle = '#4B5563';
-          ctx.fillRect(-4, 2, 8, 2);
-          // 손잡이
-          ctx.fillStyle = '#92400E';
-          ctx.fillRect(-2, 4, 4, 6);
+        const angle = b.drawAngle !== undefined ? b.drawAngle : Math.atan2(b.vy, b.vx) + Math.PI / 2;
+        if (sheet && eng.atlasReady) {
+          const name = b.isSmall ? 'knife_small' : 'knife_big';
+          const dw = b.isSmall ? smallW : mainW;
+          const dh = b.isSmall ? smallH : mainH;
+          sheet.drawFrameRotated(ctx, name, b.x, b.y, dw, dh, angle);
         } else {
-          // 작은 나이프 (POW 파편) — 메인보다 작되 이전보다 크게
-          ctx.fillStyle = '#A0A0B0';
-          ctx.beginPath();
-          ctx.moveTo(0, -9);
-          ctx.lineTo(3, 2);
-          ctx.lineTo(-3, 2);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = '#4B5563';
-          ctx.fillRect(-3.5, 2, 7, 2.5);
-        }
-        ctx.restore();
-      });
-
-      // --- 대기 중 나이프 표시 (최대 12자루, 캐릭터 기준 가운데 정렬) ---
-      if (eng.state === 'AIMING' && eng.ballCount > 0) {
-        const knifeCount = Math.min(eng.ballCount, 12);
-        const spacing = 5;
-        const rowOffsetX = -((knifeCount - 1) * spacing) / 2;
-        for (let ki = 0; ki < knifeCount; ki++) {
           ctx.save();
-          ctx.translate(eng.startPos.x + rowOffsetX + ki * spacing, eng.startPos.y + 2);
-          ctx.fillStyle = '#C0C0C0';
-          ctx.beginPath();
-          ctx.moveTo(0, -6);
-          ctx.lineTo(2, 1);
-          ctx.lineTo(-2, 1);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = '#92400E';
-          ctx.fillRect(-1.5, 1, 3, 4);
+          ctx.translate(b.x, b.y);
+          ctx.rotate(angle);
+          ctx.fillStyle = b.isSmall ? '#A0A0B0' : '#C0C0C0';
+          ctx.fillRect(-3, -12, 6, 14);
           ctx.restore();
         }
-      }
+      });
+    };
 
+    const drawKnifeStack = (sheet) => {
+      if (eng.state !== 'AIMING' || eng.ballCount <= 0) return;
+      const knifeCount = Math.min(eng.ballCount, 12);
+      const spacing = 5;
+      const rowOffsetX = -((knifeCount - 1) * spacing) / 2;
+      for (let ki = 0; ki < knifeCount; ki++) {
+        const kx = eng.startPos.x + rowOffsetX + ki * spacing;
+        const ky = eng.startPos.y + 2;
+        if (sheet && eng.atlasReady) {
+          sheet.drawFrameRotated(ctx, 'knife_small', kx, ky, 8, 16, 0);
+        } else {
+          ctx.fillStyle = '#C0C0C0';
+          ctx.fillRect(kx - 2, ky - 6, 4, 8);
+        }
+      }
+    };
+
+    const drawMaid = (sheet) => {
       const px = eng.startPos.x;
       const py = eng.startPos.y;
+      const idleNames = ['maid_small_1', 'maid_small_2', 'maid_small_3', 'maid_small_4'];
+      const throwNames = ['maid_big_1', 'maid_big_2', 'maid_big_3', 'maid_big_4'];
+      const names = eng.state === 'SHOOTING' ? throwNames : idleNames;
+      const frameName = names[eng.maidFrame % 4];
 
-      // --- 메이드 캐릭터 스프라이트 렌더링 ---
-      const spriteKey = eng.state === 'SHOOTING' ? 'throw' : 'idle';
-      const sprite = eng.sprites?.[spriteKey];
-      const CHAR_W = 60;
-      const CHAR_H = 72;
-      
-      if (sprite && sprite.complete) {
-        ctx.drawImage(sprite, px - CHAR_W / 2, py - CHAR_H + 8, CHAR_W, CHAR_H);
+      if (sheet && eng.atlasReady) {
+        sheet.drawFrame(ctx, frameName, px - MAID_CHAR_W / 2, py - MAID_CHAR_H + 8, MAID_CHAR_W, MAID_CHAR_H);
       } else {
-        // 폴백: 간단한 메이드 실루엣
-        // 머리 (은발)
-        ctx.fillStyle = '#C0C0D0';
-        ctx.beginPath(); ctx.arc(px, py - 40, 14, 0, Math.PI * 2); ctx.fill();
-        // 헤드밴드
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(px - 16, py - 52, 32, 6);
-        ctx.strokeStyle = '#FFB0C0';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(px - 16, py - 52, 32, 6);
-        // 눈
-        ctx.fillStyle = '#000000';
-        ctx.beginPath(); ctx.arc(px - 5, py - 42, 2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(px + 5, py - 42, 2, 0, Math.PI * 2); ctx.fill();
-        // 드레스 (파란색)
         ctx.fillStyle = '#3730A3';
-        ctx.beginPath();
-        ctx.moveTo(px - 12, py - 28);
-        ctx.lineTo(px + 12, py - 28);
-        ctx.lineTo(px + 18, py + 4);
-        ctx.lineTo(px - 18, py + 4);
-        ctx.closePath();
-        ctx.fill();
-        // 에이프런 (흰색)
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.moveTo(px - 8, py - 26);
-        ctx.lineTo(px + 8, py - 26);
-        ctx.lineTo(px + 12, py + 4);
-        ctx.lineTo(px - 12, py + 4);
-        ctx.closePath();
-        ctx.fill();
-        // 녹색 리본
-        ctx.fillStyle = '#10B981';
-        ctx.beginPath();
-        ctx.moveTo(px - 5, py - 28);
-        ctx.lineTo(px, py - 24);
-        ctx.lineTo(px + 5, py - 28);
-        ctx.closePath();
-        ctx.fill();
+        ctx.fillRect(px - 15, py - 40, 30, 44);
       }
+    };
 
-      // --- 패들(은빛 쟁반/막대): 캐릭터 머리 위 ---
-      const pWidth = 80;
+    const drawPaddle = (sheet) => {
+      const px = eng.startPos.x;
+      const py = eng.startPos.y;
       const paddleY = py - 70;
+      const half = PADDLE_WIDTH / 2;
+      if (sheet && eng.atlasReady) {
+        sheet.drawFrame(ctx, 'paddle_tray', px - half, paddleY, PADDLE_WIDTH, 12);
+      } else {
+        ctx.fillStyle = '#E5E7EB';
+        ctx.fillRect(px - half, paddleY, PADDLE_WIDTH, 10);
+        ctx.strokeStyle = '#6B7280';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px - half, paddleY, PADDLE_WIDTH, 10);
+      }
+    };
 
-      // 은빛 쟁반 스타일 패들
-      const paddleGrad = ctx.createLinearGradient(px - pWidth/2, paddleY, px + pWidth/2, paddleY + 10);
-      paddleGrad.addColorStop(0, '#9CA3AF');
-      paddleGrad.addColorStop(0.3, '#E5E7EB');
-      paddleGrad.addColorStop(0.5, '#F9FAFB');
-      paddleGrad.addColorStop(0.7, '#E5E7EB');
-      paddleGrad.addColorStop(1, '#9CA3AF');
-      ctx.fillStyle = paddleGrad;
-      ctx.fillRect(px - pWidth / 2, paddleY, pWidth, 10);
-      ctx.strokeStyle = '#6B7280';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(px - pWidth / 2, paddleY, pWidth, 10);
+    const drawParticles = (sheet) => {
+      for (let i = 0; i < eng.particles.length; i++) {
+        const p = eng.particles[i];
+        const s = 3 + p.life * 2;
+        ctx.globalAlpha = Math.min(1, p.life);
+        if (sheet && eng.atlasReady && p.frame) {
+          sheet.drawFrame(ctx, p.frame, p.x, p.y, s, s);
+        } else {
+          ctx.fillStyle = '#888';
+          ctx.fillRect(p.x, p.y, s, s);
+        }
+      }
+      ctx.globalAlpha = 1;
+    };
 
-      // 패들 하이라이트 라인
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(px - pWidth / 2 + 8, paddleY + 3);
-      ctx.lineTo(px + pWidth / 2 - 8, paddleY + 3);
-      ctx.stroke();
-      ctx.globalAlpha = 1.0;
+    /** 스테이지 클리어: 알파·문구로 부드럽게 */
+    const drawStageClearOverlay = () => {
+      if (eng.state !== 'STAGE_CLEAR') return;
+      const t = eng.stageClearTimer;
+      const a = Math.min(0.65, 0.12 + t * 0.02);
+      ctx.fillStyle = `rgba(0,0,0,${a})`;
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillStyle = '#4ADE80'; 
+      ctx.font = 'bold 34px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('STAGE CLEAR!', CANVAS_W / 2, CANVAS_H / 2 - 24);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '18px sans-serif';
+      ctx.fillText(`다음 레벨: ${eng.level + 1}`, CANVAS_W / 2, CANVAS_H / 2 + 18);
+    };
 
-      eng.particles.forEach(p => {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.life;
-        ctx.fillRect(p.x, p.y, 4, 4);
-      });
-      ctx.globalAlpha = 1.0;
+    const drawGameOverOverlay = () => {
+      if (eng.state !== 'GAME_OVER') return;
+      ctx.fillStyle = 'rgba(0,0,0,0.82)';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillStyle = '#EF4444';
+      ctx.font = 'bold 38px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('GAME OVER', CANVAS_W / 2, CANVAS_H / 2 - 24);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '18px sans-serif';
+      ctx.fillText('터치하여 현재 레벨 재시작', CANVAS_W / 2, CANVAS_H / 2 + 28);
+    };
 
-      if (eng.state === 'STAGE_CLEAR') {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.fillStyle = '#4ADE80'; 
-        ctx.font = 'bold 36px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('STAGE CLEAR!', CANVAS_W / 2, CANVAS_H / 2 - 20);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '20px sans-serif';
-        ctx.fillText(`다음 레벨: ${eng.level + 1}`, CANVAS_W / 2, CANVAS_H / 2 + 20);
+    const update = () => {
+      if (!running) return;
+      eng.frameCount++;
+
+      const sheet = eng.spriteSheet;
+
+      updateMaidAnimation();
+      updateStageClear();
+      updatePaddle();
+
+      if (eng.state === 'SHOOTING') {
+        updateRedEnemyBlocks();
+        updateBalls();
+      } else if (eng.state !== 'STAGE_CLEAR') {
+        eng.tutorialTimer = 0; 
       }
 
-      // --- ✨ GAME OVER 연출 업데이트 ---
-      if (eng.state === 'GAME_OVER') {
-        ctx.fillStyle = 'rgba(0,0,0,0.8)';
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.fillStyle = '#EF4444';
-        ctx.font = 'bold 40px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', CANVAS_W / 2, CANVAS_H / 2 - 20);
-        
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '20px sans-serif';
-        ctx.fillText('터치하여 현재 레벨 재시작', CANVAS_W / 2, CANVAS_H / 2 + 30);
-      }
+      updateParticles();
+      decayShake();
+
+      const sx = eng.screenShake > 0 ? (Math.random() - 0.5) * eng.screenShake : 0;
+      const sy = eng.screenShake > 0 ? (Math.random() - 0.5) * eng.screenShake * 0.7 : 0;
+      ctx.setTransform(1, 0, 0, 1, sx, sy);
+
+      drawBackground(sheet);
+      drawUI(sheet);
+      drawBlocks(sheet);
+      drawAimLine();
+      drawTutorialHint();
+      drawBalls(sheet);
+      drawKnifeStack(sheet);
+      drawMaid(sheet);
+      drawPaddle(sheet);
+      drawParticles(sheet);
+      drawStageClearOverlay();
+      drawGameOverOverlay();
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
       if (running) {
         animationId = requestAnimationFrame(update);
@@ -822,9 +969,9 @@ function GameCanvas({ onExit }) {
   const handlePointerDown = (e) => {
     const eng = engineRef.current;
     
-    // --- ✨ 게임 오버 화면 클릭 시 현재 레벨(eng.level)을 즉시 다시 시작 ---
     if (eng.state === 'GAME_OVER') {
       eng.hearts = 3; 
+      eng.ballCount = 3;
       if (eng.initLevel) eng.initLevel(eng.level);
       return;
     }
@@ -848,6 +995,7 @@ function GameCanvas({ onExit }) {
     const scaleY = CANVAS_H / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
+    eng.pointerCanvasX = Math.max(20, Math.min(CANVAS_W - 20, x));
 
     if (eng.state === 'AIMING' && eng.dragging) {
       const dx = x - eng.startPos.x;
@@ -857,8 +1005,9 @@ function GameCanvas({ onExit }) {
       if (angle < -Math.PI + 0.1) angle = -Math.PI + 0.1;
       eng.aimAngle = angle;
     } 
+    // [변경] 슈팅 중 패들은 좌표만 저장하고, 실제 이동은 updatePaddle에서 보간(모바일 떨림 완화)
     else if (eng.state === 'SHOOTING' && eng.paddleDragging) {
-      eng.startPos.x = Math.max(20, Math.min(CANVAS_W - 20, x));
+      eng.pointerCanvasX = Math.max(20, Math.min(CANVAS_W - 20, x));
     }
   };
 
@@ -868,7 +1017,8 @@ function GameCanvas({ onExit }) {
       eng.dragging = false;
       eng.state = 'SHOOTING';
       eng.ballsToShoot = eng.ballCount;
-      eng.firePos = { x: eng.startPos.x, y: eng.startPos.y }; 
+      eng.firePos = { x: eng.startPos.x, y: eng.startPos.y };
+      eng.pointerCanvasX = eng.startPos.x;
     } else if (eng.state === 'SHOOTING' && eng.paddleDragging) {
       eng.paddleDragging = false;
     }

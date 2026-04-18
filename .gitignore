@@ -1,25 +1,11 @@
-# Godot 4+ specific ignores
-.godot/
-.nomedia
-
-# Godot-specific ignores
-.import/
-export.cfg
-export_credentials.cfg
-
-# Imported translations (automatically generated from CSV files)
-*.translation
-
-# Mono-specific ignores
-.mono/
-data_*/
-mono_crash.*.json
-
 # Web (Vite / Phaser)
 phaser/node_modules/
 phaser/dist/
 pj0zero/node_modules/
 pj0zero/dist/
+godot/.godot/
+godot/build/
+build/
 
 # OS
 .DS_Store

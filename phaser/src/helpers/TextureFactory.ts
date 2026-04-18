@@ -41,46 +41,54 @@ function createBlockTextures(scene: Phaser.Scene): void {
   const bw = Math.floor(BLOCK_W - 4);
   const bh = Math.floor(BLOCK_H - 4);
 
-  // NORMAL block (white with black border)
+  // NORMAL block (dark with neon border)
   let g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(0xffffff);
+  g.fillStyle(0x16162a);
   g.fillRect(0, 0, bw, bh);
-  g.lineStyle(3, 0x000000);
-  g.strokeRect(0, 0, bw, bh);
+  g.lineStyle(2, 0x4444aa, 0.7);
+  g.strokeRect(1, 1, bw - 2, bh - 2);
+  // Inner highlight
+  g.fillStyle(0x222244, 0.5);
+  g.fillRect(2, 2, bw - 4, 3);
   g.generateTexture('block_normal', bw, bh);
   g.destroy();
 
-  // POW block (black)
+  // POW block (dark with magenta glow)
   g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(0x000000);
+  g.fillStyle(0x1a0a2e);
   g.fillRect(0, 0, bw, bh);
+  g.lineStyle(2, 0xff00ff, 0.6);
+  g.strokeRect(1, 1, bw - 2, bh - 2);
   g.generateTexture('block_pow', bw, bh);
   g.destroy();
 
-  // STAR block (white with border)
+  // STAR block (dark with golden neon border)
   g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(0xffffff);
+  g.fillStyle(0x1a1a0a);
   g.fillRect(0, 0, bw, bh);
-  g.lineStyle(3, 0x000000);
-  g.strokeRect(0, 0, bw, bh);
+  g.lineStyle(2, 0xffcc00, 0.7);
+  g.strokeRect(1, 1, bw - 2, bh - 2);
+  // Star glow center
+  g.fillStyle(0xffcc00, 0.15);
+  g.fillRect(bw / 4, bh / 4, bw / 2, bh / 2);
   g.generateTexture('block_star', bw, bh);
   g.destroy();
 
-  // RED_ENEMY block
+  // RED_ENEMY block (dark with red neon glow)
   g = scene.make.graphics({ x: 0, y: 0 }, false);
-  g.fillStyle(0xef4444);
+  g.fillStyle(0x2a0a0a);
   g.fillRect(0, 0, bw, bh);
-  g.lineStyle(3, 0x000000);
-  g.strokeRect(0, 0, bw, bh);
-  // Eyes
-  g.fillStyle(0xffffff);
+  g.lineStyle(2, 0xff2244, 0.8);
+  g.strokeRect(1, 1, bw - 2, bh - 2);
+  // Neon eyes
+  g.fillStyle(0xff0000, 0.9);
   g.fillRect(10, 18, 8, 8);
   g.fillRect(bw - 18, 18, 8, 8);
-  g.fillStyle(0x000000);
+  g.fillStyle(0xffffff);
   g.fillRect(12, 20, 4, 4);
   g.fillRect(bw - 16, 20, 4, 4);
-  // Eyebrows
-  g.lineStyle(2, 0x000000);
+  // Angry eyebrows (neon red)
+  g.lineStyle(2, 0xff4444);
   g.beginPath();
   g.moveTo(8, 12);
   g.lineTo(20, 18);
@@ -95,18 +103,19 @@ function createBlockTextures(scene: Phaser.Scene): void {
 
 function createPaddleTexture(scene: Phaser.Scene): void {
   const g = scene.make.graphics({ x: 0, y: 0 }, false);
-  // Silver gradient-ish tray
-  g.fillStyle(0x9ca3af);
+  // Dark metallic tray with neon edge
+  g.fillStyle(0x1a1a2e);
   g.fillRect(0, 0, PADDLE_WIDTH, 10);
-  g.fillStyle(0xe5e7eb);
+  g.fillStyle(0x2a2a4e);
   g.fillRect(4, 0, PADDLE_WIDTH - 8, 4);
-  g.fillStyle(0xf9fafb);
-  g.fillRect(PADDLE_WIDTH / 4, 0, PADDLE_WIDTH / 2, 3);
-  // Border
-  g.lineStyle(2, 0x6b7280);
+  // Neon cyan highlight strip
+  g.fillStyle(0x00ffff, 0.6);
+  g.fillRect(PADDLE_WIDTH / 4, 1, PADDLE_WIDTH / 2, 2);
+  // Border — neon glow
+  g.lineStyle(2, 0x00ccff, 0.7);
   g.strokeRect(0, 0, PADDLE_WIDTH, 10);
-  // Highlight
-  g.lineStyle(1, 0xffffff, 0.6);
+  // Inner highlight
+  g.lineStyle(1, 0x00ffff, 0.3);
   g.beginPath();
   g.moveTo(8, 3);
   g.lineTo(PADDLE_WIDTH - 8, 3);

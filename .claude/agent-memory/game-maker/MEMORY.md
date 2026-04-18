@@ -1,0 +1,1 @@
+- [HiteZero project setup](project_hitezero.md) -- Godot 4 2D wave survival prototype, GDScript, GL Compatibility
