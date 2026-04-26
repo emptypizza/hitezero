@@ -1,3 +1,5 @@
+# Requires branch that contains godot/ + committed dist/godot-web/site_nothreads
+# (e.g. neon-style-7cc31). Default branch main is an older tree without these paths.
 [build]
   publish = "dist/godot-web/site_nothreads"
   command = "bash godot/tools/netlify_build.sh"

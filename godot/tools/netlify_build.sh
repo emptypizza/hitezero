@@ -2,11 +2,20 @@
 # Netlify build: use committed dist, or build with Godot if CLI + templates exist.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -n "$GIT_ROOT" ]]; then
+  ROOT="$GIT_ROOT"
+else
+  ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 INDEX="$ROOT/dist/godot-web/site_nothreads/index.html"
+
+echo "netlify_build: pwd=$(pwd)"
+echo "netlify_build: ROOT=$ROOT INDEX=$INDEX"
 
 if [[ -f "$INDEX" ]]; then
   echo "netlify_build: using existing $INDEX"
+  ls -la "$(dirname "$INDEX")" | head -15
   exit 0
 fi
 
