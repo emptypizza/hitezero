@@ -39,3 +39,14 @@ bash "godot/tools/netlify_diagnose.sh"
 ```bash
 netlify deploy --prod --dir dist/godot-web/site_nothreads
 ```
+
+### If `git push` fails with “could not read Password”
+GitHub no longer accepts account passwords over HTTPS. Use one of:
+
+1. **GitHub CLI** (simplest on macOS): `brew install gh && gh auth login`, then push again.
+2. **SSH**: add an SSH key to your GitHub account, then  
+   `git remote set-url origin git@github.com:emptypizza/hitezero.git`  
+   and `git push origin neon-style-7cc31`.
+3. **HTTPS + PAT**: create a *personal access token* with `repo` scope and use it when Git asks for a password, or use Git Credential Manager.
+
+Until `git fetch` shows `origin/neon-style-7cc31` **past** commit `7a40cd5`, Netlify will not receive `netlify.toml` or `dist/godot-web/site_nothreads/`, and the site can keep showing Netlify’s “Page not found”.
