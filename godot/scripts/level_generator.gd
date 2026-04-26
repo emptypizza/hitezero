@@ -49,10 +49,10 @@ static func _add_block(game_root, col: int, y_pos: float, hp: int, max_hp: int, 
 
     var block: Block = BLOCK_SCENE.instantiate()
     block.position = Vector2(x, y)
-    block.configure(block_type, hp, max_hp, block_size)
 
     var group = game_root.moving_blocks_layer if block_type == GameConstants.BLOCK_RED_ENEMY else game_root.blocks_layer
     group.add_child(block)
+    block.configure(block_type, hp, max_hp, block_size)
 
 
 static func _has_star(game_root) -> bool:

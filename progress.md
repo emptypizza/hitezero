@@ -25,12 +25,15 @@ Original prompt: Implement the plan as specified, it is attached for your refere
 - Added `godot/tools/build_web.sh` so the pack-based no-threads web build is reproducible in one command.
 - Moved the recommended output path to repo-root `build/godot-web/` so build artifacts stay outside the Godot project root.
 - The build script now also produces `hitezero-godot-web-site_nothreads.zip` alongside the unpacked site folder.
+- Fixed `godot/tools/build_web.sh` so a relative output path is normalized to an absolute repo-root path before calling Godot export.
+- Rebuilt the latest web artifact into `dist/godot-web/`.
+- Added `dist/hitezero-itch-html.zip` as the upload-ready itch.io HTML build.
 
 ## Notes
 - Current Godot visuals use lightweight placeholder drawing instead of depending on imported art assets.
 - The local verification server is expected at `http://127.0.0.1:8123/index.html` when serving `build/godot-web/site_nothreads/`.
+- The latest distributable build now also lives under `dist/`, not just `build/`.
 
 ## Remaining TODOs
-- Root-cause the Godot 4.6 `--export-release Web ...` preset configuration error. Current evidence suggests the pack-based path is stable while full release export is not.
 - Run manual browser QA for drag aiming, paddle dragging during shooting, and mobile touch feel.
 - Compare runtime feel against `godot/docs/gameplay_spec.md`.

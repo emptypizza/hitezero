@@ -5,3 +5,11 @@ build/
 
 # OS
 .DS_Store
+
+# Agent / local worktrees
+.claude/worktrees/
+
+# Redundant local export zips (use godot/tools/build_web.sh; site_nothreads/ may still track game.zip)
+dist/godot-web/game.zip
+dist/godot-web/hitezero-godot-web-site_nothreads.zip
+dist/hitezero-itch-html.zip

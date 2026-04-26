@@ -86,8 +86,8 @@ This file records the current validation status for the Godot implementation and
 
 ## Current Decision
 - The repository now treats the Godot project as the primary game implementation.
-- The current port has passed local automated smoke checks, reproducible pack-based web assembly, and one browser automation pass, but it still needs proper release export packaging and manual performance comparison on target devices.
+- The current port has passed local automated smoke checks, reproducible pack-based web assembly, one browser automation pass, and a regression check that the web bridge state clears when returning to the title scene.
+- The Web export preset issue was traced to `vram_texture_compression/for_mobile=true`; switching it to `false` restored both `--export-debug Web ...` and `--export-release Web ...` on Godot 4.6.2.
 - Before final release, verify:
-  1. Godot web release export is reproducible without the manual shell workaround.
-  2. Touch controls are verified on at least one desktop browser and one mobile browser.
-  3. Gameplay feel is accepted against `docs/gameplay_spec.md`.
+  1. Touch controls are verified on at least one desktop browser and one mobile browser.
+  2. Gameplay feel is accepted against `docs/gameplay_spec.md`.

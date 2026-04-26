@@ -3,6 +3,7 @@
 This document captures the current gameplay contract for the Godot version of HiteZero.
 
 ## Core Constants
+- Visuals use imported textures/sprites for blocks, player, knives, and backgrounds; hit detection still uses the logical AABB, knife radius, and constants below (not pixel-alpha tests).
 - Logical viewport: `400x700`
 - Top HUD bar: `50px`
 - Paddle travel range: `x = 20..380`

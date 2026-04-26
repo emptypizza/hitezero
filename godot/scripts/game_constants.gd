@@ -31,7 +31,7 @@ const BLOCK_RED_ENEMY := "RED_ENEMY"
 
 const COLOR_BG := Color(0.04, 0.04, 0.09, 1.0)
 const COLOR_NEON := Color(0.0, 1.0, 1.0, 0.5)
-const COLOR_NEON_SOFT := Color(0.1, 0.15, 0.35, 0.3)
+const COLOR_NEON_SOFT := Color(0.14, 0.2, 0.32, 0.11)
 const COLOR_NORMAL_FILL := Color(0.09, 0.09, 0.16, 1.0)
 const COLOR_NORMAL_BORDER := Color(0.27, 0.27, 0.67, 1.0)
 const COLOR_POW_FILL := Color(0.10, 0.04, 0.18, 1.0)
