@@ -11,6 +11,27 @@ SITE_ZIP_PATH="$OUTPUT_ROOT/hitezero-godot-web-site_nothreads.zip"
 PORT="${PORT:-8123}"
 PRESET_NAME="${GODOT_WEB_PRESET:-Web}"
 
+# Catch one-line paste like: .../build_web.sh dist/godot-webpython3 -m http.server ...
+if [[ -n "${1:-}" ]]; then
+	case "$1" in
+		*webpython* | *http.server*)
+			echo "ERROR: First argument to build_web.sh looks merged with a python/http.server command: '$1'" >&2
+			echo "Run the build alone, then on the next line start the static server (see README Build For Web)." >&2
+			exit 1
+			;;
+	esac
+fi
+
+# Same paste pattern but with a space: .../build_web.sh dist/godot-web python3 -m http.server ...
+# Those become \$2, \$3, ... here; the server never runs unless it is a separate shell command.
+if [[ $# -gt 1 ]]; then
+	echo "ERROR: Too many arguments ($#): only one optional output directory is allowed." >&2
+	echo "Extra tokens look like a pasted http.server command: ${*:2}" >&2
+	echo "Run: bash \"$SCRIPT_DIR/build_web.sh\" <out-dir>   then on the next line: python3 -m http.server ..." >&2
+	echo "Or from repo root: make godot-web && make godot-web-serve" >&2
+	exit 1
+fi
+
 if [[ "$OUTPUT_ROOT" != /* ]]; then
   OUTPUT_ROOT="$REPO_ROOT/$OUTPUT_ROOT"
   SITE_DIR="$OUTPUT_ROOT/site_nothreads"
@@ -50,6 +71,11 @@ with zipfile.ZipFile(template_zip) as zf:
 shutil.copy2(pack_zip, os.path.join(site_dir, "game.zip"))
 PY
 
+# Content-addressed pack name so browsers fetch a new URL each build (query strings break --main-pack / VFS paths).
+GAME_PACK_CACHE_TAG="$(shasum -a 256 "$PACK_PATH" | awk '{print substr($1,1,16)}')"
+GAME_PACK_BASENAME="game-${GAME_PACK_CACHE_TAG}.zip"
+mv "$SITE_DIR/game.zip" "$SITE_DIR/$GAME_PACK_BASENAME"
+
 cat > "$SITE_DIR/index.html" <<'EOF'
 <!DOCTYPE html>
 <html lang="en">
@@ -57,6 +83,7 @@ cat > "$SITE_DIR/index.html" <<'EOF'
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#050510">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>HiteZero</title>
   <style>
     :root {
@@ -113,8 +140,8 @@ cat > "$SITE_DIR/index.html" <<'EOF'
 
     #canvas {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 100% !important;
+      height: 100% !important;
       outline: none;
       background: #050510;
       border-radius: clamp(0px, 1.2dvh, 14px);
@@ -158,8 +185,8 @@ cat > "$SITE_DIR/index.html" <<'EOF'
     const engine = new Engine({
       canvas: canvasEl,
       executable: 'godot',
-      mainPack: 'game.zip',
-      canvasResizePolicy: 1,
+      mainPack: '__GAME_PACK_CACHE__',
+      canvasResizePolicy: 2,
       focusCanvas: true,
       experimentalVK: true,
       serviceWorker: '',
@@ -179,6 +206,21 @@ cat > "$SITE_DIR/index.html" <<'EOF'
 </html>
 EOF
 
+sed -i.bak "s|__GAME_PACK_CACHE__|${GAME_PACK_BASENAME}|g" "$SITE_DIR/index.html" && rm -f "$SITE_DIR/index.html.bak"
+
+if grep -q '__GAME_PACK_CACHE__' "$SITE_DIR/index.html"; then
+	echo "ERROR: index.html still contains __GAME_PACK_CACHE__ placeholder." >&2
+	exit 1
+fi
+RESOLVED_PACK="$(sed -n "s/.*mainPack:[[:space:]]*'\\([^']*\\)'.*/\\1/p" "$SITE_DIR/index.html")"
+if [[ -z "$RESOLVED_PACK" || ! -f "$SITE_DIR/$RESOLVED_PACK" ]]; then
+	echo "ERROR: index.html mainPack '${RESOLVED_PACK:-<empty>}' not found in $SITE_DIR" >&2
+	exit 1
+fi
+
+# Template godot.html still has unreplaced \$GODOT_* placeholders; only custom index.html is valid for this pipeline.
+rm -f "$SITE_DIR/godot.html"
+
 python3 - <<'PY' "$SITE_DIR" "$SITE_ZIP_PATH"
 import os, sys, zipfile
 
@@ -191,11 +233,22 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.write(full_path, rel_path)
 PY
 
+# itch.io upload alias (see godot/docs/itchio_release.md): same bytes as site zip
+ITCH_HTML_ZIP="$REPO_ROOT/dist/hitezero-itch-html.zip"
+ITCH_HTML_CACHE_TAG="$(shasum -a 256 "$SITE_DIR/index.html" "$SITE_DIR/$GAME_PACK_BASENAME" | shasum -a 256 | awk '{print substr($1,1,16)}')"
+ITCH_HTML_VERSIONED_ZIP="$REPO_ROOT/dist/hitezero-itch-html-layoutfix-${ITCH_HTML_CACHE_TAG}.zip"
+mkdir -p "$(dirname "$ITCH_HTML_ZIP")"
+cp -f "$SITE_ZIP_PATH" "$ITCH_HTML_ZIP"
+cp -f "$SITE_ZIP_PATH" "$ITCH_HTML_VERSIONED_ZIP"
+
 cat <<EOF
 Build complete.
 - Pack: $PACK_PATH
+- Main pack in site: $GAME_PACK_BASENAME
 - Site: $SITE_DIR
 - Site zip: $SITE_ZIP_PATH
+- Itch upload copy: $ITCH_HTML_ZIP
+- Itch versioned upload copy: $ITCH_HTML_VERSIONED_ZIP
 - Serve: python3 -m http.server $PORT --directory "$SITE_DIR"
 - URL: http://127.0.0.1:$PORT/index.html
 EOF

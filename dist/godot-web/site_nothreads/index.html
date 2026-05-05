@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#050510">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>HiteZero</title>
   <style>
     :root {
@@ -60,8 +61,8 @@
 
     #canvas {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 100% !important;
+      height: 100% !important;
       outline: none;
       background: #050510;
       border-radius: clamp(0px, 1.2dvh, 14px);
@@ -105,8 +106,8 @@
     const engine = new Engine({
       canvas: canvasEl,
       executable: 'godot',
-      mainPack: 'game.zip',
-      canvasResizePolicy: 1,
+      mainPack: 'game-019303d5f7f1cd66.zip',
+      canvasResizePolicy: 2,
       focusCanvas: true,
       experimentalVK: true,
       serviceWorker: '',

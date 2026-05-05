@@ -40,6 +40,9 @@ var show_collider_debug: bool = false
 var spawn_timer: Timer
 var stage_timer: Timer
 var shake_time_remaining: float = 0.0
+var shake_direction := Vector2.ZERO
+var shake_strength: float = 0.0
+var shake_duration: float = 0.0
 var hit_reaction_remaining: float = 0.0
 var impact_bursts: Array[Dictionary] = []
 var web_bridge_ready: bool = false
@@ -141,6 +144,9 @@ func _start_new_run() -> void:
 	paddle_x = GameConstants.CANVAS_WIDTH * 0.5
 	fire_x = paddle_x
 	shake_time_remaining = 0.0
+	shake_direction = Vector2.ZERO
+	shake_strength = 0.0
+	shake_duration = 0.0
 	hit_reaction_remaining = 0.0
 	impact_bursts.clear()
 	world.position = Vector2.ZERO
@@ -223,6 +229,7 @@ func _start_shooting() -> void:
 	var tween := create_tween()
 	tween.tween_property(player, "scale", Vector2(1.08, 1.08), 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(player, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_play_release_commit_cue()
 
 	for child in moving_blocks_layer.get_children():
 		var block := child as Block
@@ -232,6 +239,16 @@ func _start_shooting() -> void:
 	if knives_to_spawn > 0:
 		spawn_timer.start()
 	_emit_ui_update()
+
+
+func _play_release_commit_cue() -> void:
+	# Research basis: release feedback should appear inside the perceived instant
+	# window even though actual knife spawning still follows SPAWN_INTERVAL.
+	var shot_dir := Vector2(cos(aim_angle), sin(aim_angle))
+	var muzzle := Vector2(fire_x, paddle_y - GameConstants.PADDLE_Y_OFFSET)
+	player.play_output(aim_angle)
+	_kick_world(-shot_dir, 3.0, 0.08)
+	_burst_feedback(muzzle, Color(1.0, 0.90, 0.30, 0.78), 10.0, 0.12)
 
 
 func _on_spawn_timer_timeout() -> void:
@@ -250,7 +267,9 @@ func _spawn_knife() -> void:
 	knives_layer.add_child(knife)
 	var velocity := Vector2(cos(aim_angle), sin(aim_angle)) * GameConstants.BALL_SPEED
 	knife.configure(Vector2(fire_x, paddle_y - GameConstants.PADDLE_Y_OFFSET), velocity, false)
-	_burst_feedback(knife.position, Color(0.98, 0.75, 0.20, 0.7), 10.0, 0.14)
+	player.play_output(aim_angle)
+	_kick_world(-velocity.normalized(), 2.0, 0.05)
+	_burst_feedback(knife.position, Color(1.0, 0.78, 0.25, 0.82), 12.0, 0.16)
 
 
 func _spawn_mini_knife(start_pos: Vector2, angle: float) -> void:
@@ -464,6 +483,9 @@ func restart_level() -> void:
 	fire_x = paddle_x
 	hit_reaction_remaining = 0.0
 	shake_time_remaining = 0.0
+	shake_direction = Vector2.ZERO
+	shake_strength = 0.0
+	shake_duration = 0.0
 	world.position = Vector2.ZERO
 	player.scale = Vector2.ONE
 	player.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -476,8 +498,18 @@ func restart_level() -> void:
 
 func _play_hit_reaction() -> void:
 	hit_reaction_remaining = 0.6
-	shake_time_remaining = 0.18
+	_kick_world(Vector2(0.0, -1.0), 4.0, 0.18)
 	player.modulate = Color(1.0, 0.45, 0.45, 1.0)
+
+
+func _kick_world(direction: Vector2, strength: float, duration: float) -> void:
+	if direction.length_squared() <= 0.0001:
+		shake_direction = Vector2.ZERO
+	else:
+		shake_direction = direction.normalized()
+	shake_strength = maxf(shake_strength, strength)
+	shake_duration = maxf(shake_duration, duration)
+	shake_time_remaining = maxf(shake_time_remaining, duration)
 
 
 func _update_effects(delta: float) -> void:
@@ -488,9 +520,14 @@ func _update_effects(delta: float) -> void:
 
 	if shake_time_remaining > 0.0:
 		shake_time_remaining = maxf(0.0, shake_time_remaining - delta)
-		world.position = Vector2(randf_range(-2.0, 2.0), randf_range(-2.0, 2.0))
+		var t := clampf(shake_time_remaining / maxf(0.001, shake_duration), 0.0, 1.0)
+		var jitter := Vector2(randf_range(-0.65, 0.65), randf_range(-0.65, 0.65)) * t
+		world.position = shake_direction * shake_strength * t + jitter
 		if is_zero_approx(shake_time_remaining):
 			world.position = Vector2.ZERO
+			shake_direction = Vector2.ZERO
+			shake_strength = 0.0
+			shake_duration = 0.0
 
 	for index in range(impact_bursts.size() - 1, -1, -1):
 		var burst: Dictionary = impact_bursts[index]
@@ -732,6 +769,11 @@ func _update_web_bridge_state() -> void:
 		"stars_left": _get_stars_left(),
 		"blocks": blocks,
 		"knives": knives,
+		"visual_safety": {
+			"hud_bottom": GameConstants.TOP_BAR_HEIGHT,
+			"level_start_y": GameConstants.LEVEL_START_Y,
+			"first_block_center_y": snappedf(GameConstants.LEVEL_START_Y + 2.0 + ((GameConstants.BLOCK_HEIGHT - 4.0) * 0.5), 0.1),
+		},
 		"collider_debug": show_collider_debug,
 	}
 	var json := JSON.stringify(payload)

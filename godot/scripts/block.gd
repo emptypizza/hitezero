@@ -3,7 +3,7 @@ class_name Block
 
 const GameConstants = preload("res://scripts/game_constants.gd")
 const TEX_BRICK: Texture2D = preload("res://assets/textures/blocks/brick.png")
-const TEX_ENEMY: Texture2D = preload("res://assets/textures/blocks/enemy.jpg")
+const TEX_RED_ENEMY: Texture2D = preload("res://assets/textures/blocks/red_enemy.png")
 const TEX_STAR_OVERLAY: Texture2D = preload("res://assets/textures/ui/star.png")
 
 @onready var block_sprite: Sprite2D = $BlockSprite
@@ -39,18 +39,8 @@ func _ready() -> void:
 
 
 func _draw() -> void:
-	if block_type != GameConstants.BLOCK_RED_ENEMY:
-		return
-	var eye_r := 2.2
-	var pupil_r := 0.85
-	var eye_y := -block_size.y * 0.12
-	var eye_x := block_size.x * 0.18
-	draw_circle(Vector2(-eye_x, eye_y), eye_r, Color(0.08, 0.08, 0.1, 0.92))
-	draw_circle(Vector2(eye_x, eye_y), eye_r, Color(0.08, 0.08, 0.1, 0.92))
-	draw_circle(Vector2(-eye_x, eye_y), pupil_r, Color(0.95, 0.95, 1.0, 1.0))
-	draw_circle(Vector2(eye_x, eye_y), pupil_r, Color(0.95, 0.95, 1.0, 1.0))
-	var mouth_y := block_size.y * 0.14
-	draw_arc(Vector2(0.0, mouth_y - 2.0), block_size.x * 0.22, 0.12 * PI, 0.88 * PI, 10, Color(0.12, 0.1, 0.12, 0.9), 2.0, true)
+	pass
+
 
 
 func _process(delta: float) -> void:
@@ -131,9 +121,9 @@ func _sync_label() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.visible = block_type in [GameConstants.BLOCK_NORMAL, GameConstants.BLOCK_RED_ENEMY]
+	label.visible = block_type == GameConstants.BLOCK_NORMAL
 	label.text = str(hp)
-	label.modulate = Color(1.0, 1.0, 1.0, 1.0) if block_type == GameConstants.BLOCK_RED_ENEMY else Color(0.08, 0.08, 0.08, 1.0)
+	label.modulate = Color(0.08, 0.08, 0.08, 1.0)
 	label.z_index = 4
 
 
@@ -162,7 +152,7 @@ func _apply_block_visual() -> void:
 		return
 	match block_type:
 		GameConstants.BLOCK_RED_ENEMY:
-			block_sprite.texture = TEX_ENEMY
+			block_sprite.texture = TEX_RED_ENEMY
 			_base_modulate = Color.WHITE
 		_:
 			block_sprite.texture = TEX_BRICK
@@ -184,7 +174,13 @@ func _update_sprite_scale() -> void:
 	var ts := block_sprite.texture.get_size()
 	if ts.x < 1.0 or ts.y < 1.0:
 		return
-	block_sprite.scale = Vector2(block_size.x / ts.x, block_size.y / ts.y)
+	var base_scale := Vector2(block_size.x / ts.x, block_size.y / ts.y)
+	if block_type == GameConstants.BLOCK_RED_ENEMY and enemy_active:
+		# Subtle breathing keeps the falling blob alive without adding non-red pixels.
+		var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.035
+		block_sprite.scale = base_scale * pulse
+	else:
+		block_sprite.scale = base_scale
 
 
 func _update_sprite_modulate() -> void:
@@ -192,6 +188,13 @@ func _update_sprite_modulate() -> void:
 		return
 	if flash_amount > 0.0:
 		var w := minf(0.65, flash_amount * 0.55)
-		block_sprite.modulate = _base_modulate.lerp(Color(1.0, 1.0, 1.0, 1.0), w)
+		block_sprite.modulate = _base_modulate.lerp(_flash_target_color(), w)
 	else:
 		block_sprite.modulate = _base_modulate
+
+
+func _flash_target_color() -> Color:
+	if block_type == GameConstants.BLOCK_RED_ENEMY:
+		# Hit feedback stays red-hued; never flash the enemy to white/pink.
+		return Color(1.35, 0.0, 0.0, 1.0)
+	return Color(1.0, 1.0, 1.0, 1.0)

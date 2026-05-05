@@ -17,10 +17,10 @@ static func init_level(game_root, level: int) -> void:
     var max_rows := 8
     var rows: int = min(3 + int(floor(float(level) / 2.0)), max_rows)
     for row in range(rows):
-        _generate_row(game_root, 60.0 + float(row) * GameConstants.BLOCK_HEIGHT, level, true, rng)
+        _generate_row(game_root, GameConstants.LEVEL_START_Y + float(row) * GameConstants.BLOCK_HEIGHT, level, true, rng)
 
     if not _has_star(game_root):
-        _add_block(game_root, 3, 60.0, 1, 1, GameConstants.BLOCK_STAR)
+        _add_block(game_root, 3, GameConstants.LEVEL_START_Y, 1, 1, GameConstants.BLOCK_STAR)
 
 
 static func _generate_row(game_root, y_pos: float, level: int, is_init: bool, rng: RandomNumberGenerator) -> void:
