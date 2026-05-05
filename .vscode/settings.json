@@ -1,0 +1,6 @@
+{
+  "git.terminalAuthentication": false,
+  "git.useIntegratedAskPass": false,
+  "git.githubAuthentication": false,
+  "github.gitAuthentication": false
+}

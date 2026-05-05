@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#050510">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>HiteZero</title>
+  <style>
+    :root {
+      --accent: rgba(96, 165, 250, 0.6);
+      --accent-soft: rgba(96, 165, 250, 0.22);
+      --bezel: #0b1324;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #050510;
+      color: #dbeafe;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse at 20% 10%, rgba(56, 189, 248, 0.12), transparent 55%),
+        radial-gradient(ellipse at 85% 90%, rgba(168, 85, 247, 0.10), transparent 60%),
+        #050510;
+    }
+
+    #stage {
+      position: relative;
+      display: block;
+      height: min(100dvh, calc(100dvw * 7 / 4));
+      aspect-ratio: 4 / 7;
+      max-width: 100dvw;
+      padding: clamp(0px, 1.2dvh, 14px);
+      border-radius: clamp(0px, 1.8dvh, 22px);
+      background: linear-gradient(160deg, #10182e 0%, #060914 70%);
+      box-shadow:
+        0 0 0 1px var(--accent-soft),
+        0 20px 60px rgba(0, 0, 0, 0.55),
+        0 0 80px rgba(96, 165, 250, 0.18);
+    }
+
+    /* On narrow/portrait viewports the bezel hugs the edges */
+    @media (max-aspect-ratio: 4/7) {
+      #stage {
+        width: 100dvw;
+        height: auto;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+
+    #canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      outline: none;
+      background: #050510;
+      border-radius: clamp(0px, 1.2dvh, 14px);
+    }
+
+    #status {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 8px 10px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+  </div>
+  <div id="status">Loading...</div>
+
+  <script src="godot.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const canvasEl = document.getElementById('canvas');
+    const stageEl = document.getElementById('stage');
+
+    // #region agent log
+    function debugLogLayout(runId, hypothesisId, message) {
+      const stageRect = stageEl.getBoundingClientRect();
+      const canvasRect = canvasEl.getBoundingClientRect();
+      const stageStyle = window.getComputedStyle(stageEl);
+      const canvasStyle = window.getComputedStyle(canvasEl);
+      fetch('http://127.0.0.1:7607/ingest/c7b91b3e-5ace-4e70-a9a2-cb0b0394c21b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'2345d3'},body:JSON.stringify({sessionId:'2345d3',runId,hypothesisId,location:'godot/tools/build_web.sh:index-template',message,data:{window:{innerWidth:window.innerWidth,innerHeight:window.innerHeight,devicePixelRatio:window.devicePixelRatio},visualViewport:window.visualViewport?{width:window.visualViewport.width,height:window.visualViewport.height,scale:window.visualViewport.scale}:null,document:{clientWidth:document.documentElement.clientWidth,clientHeight:document.documentElement.clientHeight,bodyClientWidth:document.body.clientWidth,bodyClientHeight:document.body.clientHeight},stage:{rect:{x:stageRect.x,y:stageRect.y,width:stageRect.width,height:stageRect.height},style:{width:stageStyle.width,height:stageStyle.height,aspectRatio:stageStyle.aspectRatio,padding:stageStyle.padding,display:stageStyle.display}},canvas:{rect:{x:canvasRect.x,y:canvasRect.y,width:canvasRect.width,height:canvasRect.height},attr:{width:canvasEl.width,height:canvasEl.height},style:{width:canvasStyle.width,height:canvasStyle.height,display:canvasStyle.display}}},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
+
+    function syncCanvasPixels() {
+      const rect = canvasEl.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // #region agent log
+      debugLogLayout('pre-fix','H1,H2,H3','before canvas pixel sync');
+      // #endregion
+      canvasEl.width = Math.max(1, Math.round(rect.width * dpr));
+      canvasEl.height = Math.max(1, Math.round(rect.height * dpr));
+      // #region agent log
+      debugLogLayout('pre-fix','H1,H3,H5','after canvas pixel sync');
+      // #endregion
+    }
+    syncCanvasPixels();
+    window.addEventListener('resize', () => {
+      // #region agent log
+      debugLogLayout('pre-fix','H2,H3','window resize observed');
+      // #endregion
+      syncCanvasPixels();
+    });
+    window.addEventListener('orientationchange', () => {
+      // #region agent log
+      debugLogLayout('pre-fix','H2,H3','orientation change observed');
+      // #endregion
+      syncCanvasPixels();
+    });
+    if ('ResizeObserver' in window) {
+      const resizeObserver = new ResizeObserver(() => {
+        // #region agent log
+        debugLogLayout('pre-fix','H2,H3,H5','stage or canvas resize observer fired');
+        // #endregion
+      });
+      resizeObserver.observe(stageEl);
+      resizeObserver.observe(canvasEl);
+    }
+
+    const engine = new Engine({
+      canvas: canvasEl,
+      executable: 'godot',
+      mainPack: 'game-019303d5f7f1cd66.zip',
+      canvasResizePolicy: 2,
+      focusCanvas: true,
+      experimentalVK: true,
+      serviceWorker: '',
+    });
+
+    // #region agent log
+    debugLogLayout('pre-fix','H4,H5','before engine start');
+    // #endregion
+    engine.startGame().then(() => {
+      statusEl.textContent = 'Running';
+      // #region agent log
+      debugLogLayout('pre-fix','H4,H5','after engine start resolved');
+      // #endregion
+      window.requestAnimationFrame(() => {
+        // #region agent log
+        debugLogLayout('pre-fix','H3,H4,H5','first animation frame after engine start');
+        // #endregion
+        statusEl.style.display = 'none';
+      });
+    }).catch((err) => {
+      console.error(err);
+      statusEl.textContent = `Startup failed: ${err instanceof Error ? err.message : err}`;
+    });
+  </script>
+</body>
+</html>
