@@ -3,9 +3,10 @@ class_name Knife
 
 const GameConstants = preload("res://scripts/game_constants.gd")
 const TEX_KNIFE: Texture2D = preload("res://assets/textures/knife/knife.png")
-const TRAIL_MAX_POINTS := 5
+const TRAIL_MAX_POINTS := 8
 const TRAIL_OUTLINE_COLOR := Color(0.03, 0.04, 0.08, 0.58)
 const TRAIL_CORE_COLOR := Color(1.0, 0.88, 0.36, 0.78)
+const TRAIL_MINI_CORE_COLOR := Color(0.35, 0.92, 1.0, 0.68)
 
 var velocity := Vector2.ZERO
 var radius: float = GameConstants.KNIFE_RADIUS
@@ -81,6 +82,7 @@ func _trim_trail_points() -> void:
 func _draw_trail() -> void:
 	if not active or trail_points.size() < 2:
 		return
+	var base_core := TRAIL_MINI_CORE_COLOR if is_small else TRAIL_CORE_COLOR
 	for index in range(1, trail_points.size()):
 		var fade := float(index) / float(maxi(1, trail_points.size() - 1))
 		var width_mul := 0.72 if is_small else 1.0
@@ -89,7 +91,9 @@ func _draw_trail() -> void:
 		var p1 := to_local(trail_points[index])
 		var outline := TRAIL_OUTLINE_COLOR
 		outline.a *= fade * alpha_mul
-		var core := TRAIL_CORE_COLOR
+		var core := base_core
 		core.a *= fade * alpha_mul
+		var glow := Color(core.r, core.g, core.b, core.a * 0.28)
+		draw_line(p0, p1, glow, 9.0 * width_mul)
 		draw_line(p0, p1, outline, 5.2 * width_mul)
 		draw_line(p0, p1, core, 2.2 * width_mul)

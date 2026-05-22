@@ -21,6 +21,10 @@ var overlay_subinfo: Label
 var collider_button: Button
 var collider_debug_on: bool = false
 
+var _prev_hearts: int = -1
+var _prev_knife_count: int = -1
+var _prev_stars_left: int = -1
+
 
 func _ready() -> void:
 	layer = 20
@@ -28,9 +32,25 @@ func _ready() -> void:
 
 
 func update_ui(data: Dictionary) -> void:
-	_refresh_hearts(clampi(int(data.get("hearts", 0)), 0, GameConstants.HEARTS_MAX))
-	knife_count_label.text = "%02d" % int(data.get("knife_count", 0))
-	stars_label.text = "%d" % int(data.get("stars_left", 0))
+	var new_hearts := clampi(int(data.get("hearts", 0)), 0, GameConstants.HEARTS_MAX)
+	var new_knife_count := int(data.get("knife_count", 0))
+	var new_stars_left := int(data.get("stars_left", 0))
+
+	if _prev_hearts >= 0:
+		if new_hearts < _prev_hearts:
+			_heart_flash()
+		if new_knife_count != _prev_knife_count:
+			_punch_scale(knife_count_label)
+		if new_stars_left != _prev_stars_left:
+			_punch_scale(stars_label)
+
+	_prev_hearts = new_hearts
+	_prev_knife_count = new_knife_count
+	_prev_stars_left = new_stars_left
+
+	_refresh_hearts(new_hearts)
+	knife_count_label.text = "%02d" % new_knife_count
+	stars_label.text = "%d" % new_stars_left
 
 
 func show_stage_clear(next_level: int) -> void:
@@ -119,6 +139,7 @@ func _build_ui() -> void:
 	knife_count_label = Label.new()
 	knife_count_label.position = Vector2(142.0, 12.0)
 	knife_count_label.size = Vector2(56.0, 22.0)
+	knife_count_label.pivot_offset = Vector2(28.0, 11.0)
 	knife_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	knife_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	knife_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -138,6 +159,7 @@ func _build_ui() -> void:
 	stars_label = Label.new()
 	stars_label.position = Vector2(242.0, 12.0)
 	stars_label.size = Vector2(44.0, 22.0)
+	stars_label.pivot_offset = Vector2(22.0, 11.0)
 	stars_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	stars_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	stars_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
@@ -225,3 +247,20 @@ func _build_ui() -> void:
 func _on_collider_button_pressed() -> void:
 	set_collider_debug(not collider_debug_on)
 	collider_debug_toggled.emit(collider_debug_on)
+
+
+func _punch_scale(node: Control) -> void:
+	if node == null:
+		return
+	node.scale = Vector2.ONE
+	var t := create_tween()
+	t.tween_property(node, "scale", Vector2(1.25, 1.25), 0.06).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.tween_property(node, "scale", Vector2(1.0, 1.0), 0.06).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func _heart_flash() -> void:
+	if hearts_row == null:
+		return
+	var t := create_tween()
+	t.tween_property(hearts_row, "modulate", Color(1.0, 0.22, 0.22, 1.0), 0.05)
+	t.tween_property(hearts_row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.18)

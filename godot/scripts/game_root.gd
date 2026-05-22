@@ -45,6 +45,13 @@ var shake_strength: float = 0.0
 var shake_duration: float = 0.0
 var hit_reaction_remaining: float = 0.0
 var impact_bursts: Array[Dictionary] = []
+var vfx_particles: Array[Dictionary] = []
+var bg_particles: Array[Dictionary] = []
+var _bg_spawn_acc: float = 0.0
+var _flash_rect: ColorRect = null
+var _flash_start_msec: int = -1
+var _flash_start_alpha: float = 0.0
+var _flash_duration_msec: int = 300
 var web_bridge_ready: bool = false
 
 
@@ -60,12 +67,16 @@ func _ready() -> void:
 	hud.title_requested.connect(_return_to_title)
 	hud.collider_debug_toggled.connect(_set_collider_debug)
 
+	_create_flash_overlay()
 	player.position = Vector2(paddle_x, paddle_y)
 	_start_new_run()
 
 
 func _process(delta: float) -> void:
 	_update_effects(delta)
+	_update_flash_overlay()
+	_update_vfx_particles(delta)
+	_update_bg_particles(delta)
 	_refresh_player_visuals()
 	_update_web_bridge_state()
 
@@ -92,8 +103,10 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
+	_draw_bg_particles()
 	_draw_background()
 	_draw_impact_bursts()
+	_draw_vfx_particles()
 	_draw_aim_line()
 	_draw_collider_debug()
 
@@ -149,6 +162,8 @@ func _start_new_run() -> void:
 	shake_duration = 0.0
 	hit_reaction_remaining = 0.0
 	impact_bursts.clear()
+	vfx_particles.clear()
+	bg_particles.clear()
 	world.position = Vector2.ZERO
 	player.scale = Vector2.ONE
 	player.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -369,19 +384,24 @@ func _check_block_collision(knife: Knife, container: Node2D) -> void:
 func _hit_block(block: Block) -> void:
 	var remaining_hp := block.take_hit()
 	_burst_feedback(block.global_position, block.get_hit_color(), 14.0, 0.20)
+	_spawn_hit_vfx(block.global_position, block.get_hit_color())
 	if remaining_hp <= 0:
 		_destroy_block(block)
 
 
 func _destroy_block(block: Block) -> void:
 	var block_type := block.block_type
+	var bpos := block.global_position
 	if block_type == GameConstants.BLOCK_STAR:
 		pending_stars += 1
 	elif block_type == GameConstants.BLOCK_POW:
 		for index in range(8):
 			var angle := (float(index) / 8.0) * TAU
 			_spawn_mini_knife(block.position, angle)
+		_flash_screen(Color(1.0, 0.25, 1.0, 1.0), 0.55, 0.14)
+		_freeze_frame(0.05)
 
+	_spawn_destroy_vfx(bpos, block_type)
 	score += 100
 	block.queue_free()
 	_emit_ui_update()
@@ -450,6 +470,7 @@ func _trigger_stage_clear() -> void:
 	pending_stars = 0
 	player.scale = Vector2.ONE
 	stage_cleared.emit(level + 1)
+	_flash_screen(Color(0.35, 1.0, 0.55, 1.0), 0.6, 0.24)
 	_emit_ui_update()
 	stage_timer.start(1.2)
 
@@ -466,6 +487,7 @@ func _trigger_game_over() -> void:
 	player.modulate = Color(0.78, 0.78, 0.84, 1.0)
 	Session.submit_score(score)
 	game_overed.emit(score, level, Session.best_score)
+	_flash_screen(Color(0.85, 0.15, 0.15, 1.0), 0.65, 0.28)
 	_emit_ui_update()
 
 
@@ -487,6 +509,7 @@ func restart_level() -> void:
 	shake_strength = 0.0
 	shake_duration = 0.0
 	world.position = Vector2.ZERO
+	vfx_particles.clear()
 	player.scale = Vector2.ONE
 	player.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	player.set_state("idle")
@@ -500,6 +523,7 @@ func _play_hit_reaction() -> void:
 	hit_reaction_remaining = 0.6
 	_kick_world(Vector2(0.0, -1.0), 4.0, 0.18)
 	player.modulate = Color(1.0, 0.45, 0.45, 1.0)
+	_flash_screen(Color(1.0, 0.3, 0.3, 1.0), 0.4, 0.12)
 
 
 func _kick_world(direction: Vector2, strength: float, duration: float) -> void:
@@ -628,15 +652,16 @@ func _draw_aim_line() -> void:
 		return
 
 	var start := Vector2(paddle_x, paddle_y - GameConstants.PADDLE_Y_OFFSET)
-	var segment_length := 8.0
-	var direction := Vector2(cos(aim_angle), sin(aim_angle)) * segment_length
-	var cursor := start
-	for step in range(int(GameConstants.CANVAS_HEIGHT / segment_length)):
-		if step % 2 == 0:
-			draw_line(cursor, cursor + direction, Color(0.98, 0.75, 0.14, 1.0), 3.0)
-		cursor += direction
-		if cursor.y < 0.0 or cursor.x < 0.0 or cursor.x > GameConstants.CANVAS_WIDTH:
-			break
+	var dir := Vector2(cos(aim_angle), sin(aim_angle))
+
+	var hit1 := _ray_wall_hit(start, dir)
+	_draw_aim_dashed(start, hit1, Color(0.98, 0.75, 0.14, 1.0), 2.5)
+
+	var ref_dir := _reflect_dir(dir, hit1)
+	var hit2 := _ray_wall_hit(hit1 + ref_dir * 2.0, ref_dir)
+	_draw_aim_dashed(hit1, hit2, Color(0.98, 0.75, 0.14, 0.40), 1.5)
+
+	_draw_crosshair(start, Color(0.98, 0.92, 0.30, 0.88))
 
 
 func _draw_collider_debug() -> void:
@@ -792,3 +817,259 @@ func _game_state_name() -> String:
 			return "GAME_OVER"
 		_:
 			return "UNKNOWN"
+
+
+# ─── Flash overlay ──────────────────────────────────────────────────────────
+
+func _create_flash_overlay() -> void:
+	var flash_layer := CanvasLayer.new()
+	flash_layer.layer = 100
+	add_child(flash_layer)
+	_flash_rect = ColorRect.new()
+	_flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash_rect.color = Color(0.0, 0.0, 0.0, 0.0)
+	_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash_layer.add_child(_flash_rect)
+
+
+func _flash_screen(color: Color, intensity: float, duration: float) -> void:
+	if _flash_rect == null:
+		return
+	_flash_rect.color = Color(color.r, color.g, color.b, clampf(intensity, 0.0, 0.95))
+	_flash_start_alpha = _flash_rect.color.a
+	_flash_start_msec = Time.get_ticks_msec()
+	_flash_duration_msec = maxi(1, int(duration * 1000.0))
+
+
+func _update_flash_overlay() -> void:
+	if _flash_rect == null or _flash_start_msec < 0:
+		return
+	var elapsed := Time.get_ticks_msec() - _flash_start_msec
+	if elapsed >= _flash_duration_msec:
+		_flash_rect.color.a = 0.0
+		_flash_start_msec = -1
+		return
+	var t := 1.0 - float(elapsed) / float(_flash_duration_msec)
+	_flash_rect.color.a = _flash_start_alpha * (t * t)
+
+
+func _freeze_frame(duration_sec: float) -> void:
+	if Engine.time_scale < 0.5:
+		return
+	Engine.time_scale = 0.05
+	await get_tree().create_timer(duration_sec, true, false, true).timeout
+	Engine.time_scale = 1.0
+
+
+# ─── Typed VFX bursts ───────────────────────────────────────────────────────
+
+func _spawn_destroy_vfx(pos: Vector2, block_type: String) -> void:
+	match block_type:
+		GameConstants.BLOCK_NORMAL:
+			_vfx_sparks(pos, 10, Color(0.25, 0.72, 1.0), Color(0.75, 0.96, 1.0), 80.0, 160.0, 0.36)
+		GameConstants.BLOCK_POW:
+			_vfx_ring(pos, Color(1.0, 0.08, 1.0, 0.88), 0.46)
+			_vfx_ring(pos, Color(1.0, 1.0, 1.0, 0.52), 0.30)
+			_vfx_sparks(pos, 14, Color(1.0, 0.28, 1.0), Color(1.0, 0.88, 1.0), 100.0, 220.0, 0.40)
+		GameConstants.BLOCK_STAR:
+			_vfx_sparks(pos, 12, Color(1.0, 0.72, 0.0), Color(1.0, 0.98, 0.55), 60.0, 130.0, 0.50)
+			_vfx_starburst(pos, Color(1.0, 0.95, 0.42, 0.92), 0.38)
+		GameConstants.BLOCK_RED_ENEMY:
+			_vfx_ring(pos, Color(0.92, 0.12, 0.20, 0.72), 0.36)
+			_vfx_sparks(pos, 10, Color(0.92, 0.18, 0.18), Color(1.0, 0.68, 0.38), 90.0, 180.0, 0.38)
+
+
+func _spawn_hit_vfx(pos: Vector2, color: Color) -> void:
+	_vfx_sparks(pos, 4, color, color.lerp(Color.WHITE, 0.4), 36.0, 76.0, 0.18)
+
+
+func _vfx_sparks(pos: Vector2, count: int, color_a: Color, color_b: Color,
+		speed_min: float, speed_max: float, life: float) -> void:
+	for i in range(count):
+		var angle := float(i) / float(count) * TAU + randf_range(-0.3, 0.3)
+		var speed := randf_range(speed_min, speed_max)
+		var c := color_a.lerp(color_b, randf())
+		vfx_particles.append({
+			"x": pos.x + randf_range(-3.0, 3.0),
+			"y": pos.y + randf_range(-3.0, 3.0),
+			"vx": cos(angle) * speed,
+			"vy": sin(angle) * speed,
+			"radius": randf_range(1.5, 3.5),
+			"color": c,
+			"life": life * randf_range(0.7, 1.0),
+			"max_life": life,
+			"shape": "circle",
+		})
+
+
+func _vfx_ring(pos: Vector2, color: Color, life: float) -> void:
+	vfx_particles.append({
+		"x": pos.x, "y": pos.y,
+		"vx": 0.0, "vy": 0.0,
+		"radius": 4.0,
+		"expand": 190.0,
+		"color": color,
+		"life": life,
+		"max_life": life,
+		"shape": "ring",
+	})
+
+
+func _vfx_starburst(pos: Vector2, color: Color, life: float) -> void:
+	vfx_particles.append({
+		"x": pos.x, "y": pos.y,
+		"vx": 0.0, "vy": 0.0,
+		"radius": 20.0,
+		"expand": 0.0,
+		"color": color,
+		"life": life,
+		"max_life": life,
+		"shape": "star",
+	})
+
+
+func _update_vfx_particles(delta: float) -> void:
+	for i in range(vfx_particles.size() - 1, -1, -1):
+		var p: Dictionary = vfx_particles[i]
+		p["life"] = float(p["life"]) - delta
+		if float(p["life"]) <= 0.0:
+			vfx_particles.remove_at(i)
+			continue
+		p["x"] = float(p["x"]) + float(p["vx"]) * delta
+		p["y"] = float(p["y"]) + float(p["vy"]) * delta
+		p["vx"] = float(p["vx"]) * 0.82
+		p["vy"] = float(p["vy"]) * 0.82
+		if p.get("shape") == "ring":
+			p["radius"] = float(p["radius"]) + float(p.get("expand", 0.0)) * delta
+		vfx_particles[i] = p
+
+
+func _draw_vfx_particles() -> void:
+	for p in vfx_particles:
+		var life := float(p["life"])
+		var max_life := float(p["max_life"])
+		var t := clampf(life / max_life, 0.0, 1.0)
+		var pos := Vector2(float(p["x"]), float(p["y"]))
+		var color: Color = p["color"]
+		color.a *= t
+		match p.get("shape", "circle"):
+			"circle":
+				draw_circle(pos, maxf(0.5, float(p["radius"]) * (0.55 + 0.45 * t)), color)
+			"ring":
+				var r := float(p["radius"])
+				if r > 0.5:
+					draw_arc(pos, r, 0.0, TAU, 24, color, maxf(1.0, 3.2 * t))
+			"star":
+				var sz := float(p["radius"]) * t
+				draw_line(pos - Vector2(sz, 0.0), pos + Vector2(sz, 0.0), color, 2.0)
+				draw_line(pos - Vector2(0.0, sz), pos + Vector2(0.0, sz), color, 2.0)
+				var d := sz * 0.68
+				draw_line(pos - Vector2(d, d), pos + Vector2(d, d), color, 1.5)
+				draw_line(pos + Vector2(-d, d), pos - Vector2(-d, d), color, 1.5)
+
+
+# ─── Background particles ────────────────────────────────────────────────────
+
+const _BG_PARTICLE_MAX := 45
+const _BG_SPAWN_INTERVAL := 0.07
+
+
+func _bg_particle_color() -> Color:
+	match (level - 1) % 4:
+		0: return Color(0.0, 0.85, 1.0)
+		1: return Color(0.65, 0.25, 1.0)
+		2: return Color(1.0, 0.55, 0.15)
+		_: return Color(1.0, 0.25, 0.85)
+
+
+func _spawn_bg_particle() -> void:
+	if bg_particles.size() >= _BG_PARTICLE_MAX:
+		return
+	bg_particles.append({
+		"x": randf_range(0.0, GameConstants.CANVAS_WIDTH),
+		"y": randf_range(-30.0, GameConstants.TOP_BAR_HEIGHT),
+		"vx": randf_range(-6.0, 6.0),
+		"vy": randf_range(18.0, 52.0),
+		"radius": randf_range(0.8, 2.5),
+		"alpha": randf_range(0.05, 0.17),
+		"life": randf_range(7.0, 15.0),
+		"max_life": 15.0,
+		"color": _bg_particle_color(),
+	})
+
+
+func _update_bg_particles(delta: float) -> void:
+	_bg_spawn_acc += delta
+	while _bg_spawn_acc >= _BG_SPAWN_INTERVAL:
+		_bg_spawn_acc -= _BG_SPAWN_INTERVAL
+		_spawn_bg_particle()
+	for i in range(bg_particles.size() - 1, -1, -1):
+		var p: Dictionary = bg_particles[i]
+		p["y"] = float(p["y"]) + float(p["vy"]) * delta
+		p["x"] = float(p["x"]) + float(p["vx"]) * delta
+		p["life"] = float(p["life"]) - delta
+		if float(p["y"]) > GameConstants.CANVAS_HEIGHT + 10.0 or float(p["life"]) <= 0.0:
+			bg_particles.remove_at(i)
+		else:
+			bg_particles[i] = p
+
+
+func _draw_bg_particles() -> void:
+	for p in bg_particles:
+		var life := float(p["life"])
+		var max_life := float(p["max_life"])
+		var t := life / max_life
+		var alpha_scale: float
+		if t > 0.88:
+			alpha_scale = (1.0 - t) / 0.12
+		elif t < 0.18:
+			alpha_scale = t / 0.18
+		else:
+			alpha_scale = 1.0
+		var color: Color = p["color"]
+		color.a = float(p["alpha"]) * alpha_scale
+		draw_circle(Vector2(float(p["x"]), float(p["y"])), float(p["radius"]), color)
+
+
+# ─── Aim line helpers ────────────────────────────────────────────────────────
+
+func _ray_wall_hit(from: Vector2, dir: Vector2) -> Vector2:
+	var t_min := 2000.0
+	if dir.x > 0.0001:
+		t_min = minf(t_min, (GameConstants.CANVAS_WIDTH - from.x) / dir.x)
+	elif dir.x < -0.0001:
+		t_min = minf(t_min, -from.x / dir.x)
+	if dir.y < -0.0001:
+		t_min = minf(t_min, (GameConstants.TOP_BAR_HEIGHT - from.y) / dir.y)
+	elif dir.y > 0.0001:
+		t_min = minf(t_min, (GameConstants.BOTTOM_Y - from.y) / dir.y)
+	return from + dir * t_min
+
+
+func _reflect_dir(dir: Vector2, hit_pos: Vector2) -> Vector2:
+	var eps := 1.5
+	if hit_pos.x <= eps or hit_pos.x >= GameConstants.CANVAS_WIDTH - eps:
+		return Vector2(-dir.x, dir.y)
+	return Vector2(dir.x, -dir.y)
+
+
+func _draw_aim_dashed(from: Vector2, to: Vector2, color: Color, width: float) -> void:
+	var total := from.distance_to(to)
+	if total < 1.0:
+		return
+	var d := (to - from) / total
+	var seg := 7.0
+	var gap := 5.0
+	var pos := 0.0
+	while pos < total:
+		var end_pos := minf(pos + seg, total)
+		draw_line(from + d * pos, from + d * end_pos, color, width)
+		pos += seg + gap
+
+
+func _draw_crosshair(pos: Vector2, color: Color) -> void:
+	var arm := 7.0
+	draw_line(pos + Vector2(-arm, 0.0), pos + Vector2(arm, 0.0), color, 1.5)
+	draw_line(pos + Vector2(0.0, -arm), pos + Vector2(0.0, arm), color, 1.5)
+	var ring_c := Color(color.r, color.g, color.b, color.a * 0.5)
+	draw_arc(pos, arm - 0.5, 0.0, TAU, 16, ring_c, 1.0)
