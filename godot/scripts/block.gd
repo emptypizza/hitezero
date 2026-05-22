@@ -3,7 +3,9 @@ class_name Block
 
 const GameConstants = preload("res://scripts/game_constants.gd")
 const TEX_BRICK: Texture2D = preload("res://assets/textures/blocks/brick.png")
-const TEX_RED_ENEMY: Texture2D = preload("res://assets/textures/blocks/red_enemy.png")
+const TEX_RED_ENEMY: Texture2D = preload("res://assets/textures/blocks/E1.webp")
+const TEX_STAR_BLOCK: Texture2D = preload("res://assets/textures/blocks/S1.webp")
+const TEX_POW_BLOCK: Texture2D = preload("res://assets/textures/blocks/P1.webp")
 const TEX_STAR_OVERLAY: Texture2D = preload("res://assets/textures/ui/star.png")
 
 @onready var block_sprite: Sprite2D = $BlockSprite
@@ -129,17 +131,9 @@ func _sync_label() -> void:
 
 func _sync_overlays() -> void:
 	if overlay_star != null:
-		var show_star := block_type == GameConstants.BLOCK_STAR
-		overlay_star.visible = show_star
-		if show_star and overlay_star.texture != null:
-			var sw := minf(block_size.x * 0.62, 32.0)
-			var ts := overlay_star.texture.get_size()
-			if ts.x > 0.0 and ts.y > 0.0:
-				overlay_star.scale = Vector2(sw / ts.x, sw / ts.y)
+		overlay_star.visible = false
 	if pow_label != null:
-		pow_label.visible = block_type == GameConstants.BLOCK_POW
-		pow_label.position = Vector2(-block_size.x * 0.5, -block_size.y * 0.5 - 6.0)
-		pow_label.size = Vector2(block_size.x, 22.0)
+		pow_label.visible = false
 
 
 func _ensure_label() -> void:
@@ -154,15 +148,15 @@ func _apply_block_visual() -> void:
 		GameConstants.BLOCK_RED_ENEMY:
 			block_sprite.texture = TEX_RED_ENEMY
 			_base_modulate = Color.WHITE
+		GameConstants.BLOCK_STAR:
+			block_sprite.texture = TEX_STAR_BLOCK
+			_base_modulate = Color.WHITE
+		GameConstants.BLOCK_POW:
+			block_sprite.texture = TEX_POW_BLOCK
+			_base_modulate = Color.WHITE
 		_:
 			block_sprite.texture = TEX_BRICK
-			match block_type:
-				GameConstants.BLOCK_STAR:
-					_base_modulate = Color(1.06, 1.0, 0.72, 1.0)
-				GameConstants.BLOCK_POW:
-					_base_modulate = Color(1.08, 0.82, 1.05, 1.0)
-				_:
-					_base_modulate = Color.WHITE
+			_base_modulate = Color.WHITE
 	_update_sprite_modulate()
 	_update_sprite_scale()
 	queue_redraw()
