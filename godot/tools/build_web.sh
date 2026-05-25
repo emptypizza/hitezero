@@ -89,6 +89,7 @@ cat > "$SITE_DIR/index.html" <<'EOF'
     :root {
       --accent: rgba(96, 165, 250, 0.6);
       --accent-soft: rgba(96, 165, 250, 0.22);
+      --bezel: #0b1324;
     }
 
     html, body {
@@ -111,17 +112,13 @@ cat > "$SITE_DIR/index.html" <<'EOF'
         #050510;
     }
 
-    /*
-     * Both width and height are explicit so that #canvas's height:100% resolves
-     * correctly in all browsers.  Using only height + aspect-ratio (height:auto
-     * variant) left the height "indefinite" for percentage resolution, causing
-     * the canvas to collapse to 0 height on portrait mobile.
-     */
     #stage {
       position: relative;
-      overflow: hidden;
-      width: min(100dvw, calc(100dvh * 4 / 7));
+      display: block;
       height: min(100dvh, calc(100dvw * 7 / 4));
+      aspect-ratio: 4 / 7;
+      max-width: 100dvw;
+      padding: clamp(0px, 1.2dvh, 14px);
       border-radius: clamp(0px, 1.8dvh, 22px);
       background: linear-gradient(160deg, #10182e 0%, #060914 70%);
       box-shadow:
@@ -130,25 +127,33 @@ cat > "$SITE_DIR/index.html" <<'EOF'
         0 0 80px rgba(96, 165, 250, 0.18);
     }
 
-    /* On narrow/portrait viewports remove the decorative bezel */
+    /* On narrow/portrait viewports the bezel hugs the edges */
     @media (max-aspect-ratio: 4/7) {
       #stage {
+        width: 100dvw;
+        height: auto;
+        padding: 0;
         border-radius: 0;
         box-shadow: none;
       }
     }
 
     /*
-     * Absolute fill so that canvas covers #stage regardless of whether the
-     * parent height is explicit or computed — avoids the height:100% / auto
-     * parent trap that caused the squished-display regression on mobile.
+     * Canvas fills the stage. !important + max/min guards beat any inline
+     * style that godot.js's updateSize might re-inject. We also strip those
+     * inline styles defensively via MutationObserver below.
      */
     #canvas {
       display: block;
-      position: absolute;
-      inset: 0;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
       outline: none;
       background: #050510;
+      border-radius: clamp(0px, 1.2dvh, 14px);
     }
 
     #status {
@@ -175,12 +180,48 @@ cat > "$SITE_DIR/index.html" <<'EOF'
   <script>
     const statusEl = document.getElementById('status');
     const canvasEl = document.getElementById('canvas');
+    const stageEl = document.getElementById('stage');
+
+    // --- 잠수함 패치 / submarine patch:
+    //   godot.js's updateSize() forces canvas.style.width/height to inline
+    //   px values derived from window.innerWidth/innerHeight when
+    //   canvasResizePolicy=2 (Adaptive). On itch.io's wide iframe this makes
+    //   the internal pixel buffer ~1990px while CSS displays the canvas at
+    //   ~743px (4:7 portrait), squashing the game into a narrow vertical
+    //   strip on the right side.
+    //   Fix: canvasResizePolicy=0 (None) disables Godot's auto-resize, and
+    //   a MutationObserver strips any inline width/height that still slips
+    //   in. syncCanvasPixels() then sizes the internal buffer to the
+    //   canvas's actual rendered CSS size x DPR.
+    function stripCanvasInlineSize() {
+      const s = canvasEl.style;
+      if (s.width)     s.removeProperty('width');
+      if (s.height)    s.removeProperty('height');
+      if (s.maxWidth)  s.removeProperty('max-width');
+      if (s.maxHeight) s.removeProperty('max-height');
+    }
+    stripCanvasInlineSize();
+    const styleGuard = new MutationObserver(stripCanvasInlineSize);
+    styleGuard.observe(canvasEl, { attributes: true, attributeFilter: ['style'] });
+
+    function syncCanvasPixels() {
+      const rect = canvasEl.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvasEl.width = Math.max(1, Math.round(rect.width * dpr));
+      canvasEl.height = Math.max(1, Math.round(rect.height * dpr));
+    }
+    syncCanvasPixels();
+    window.addEventListener('resize', syncCanvasPixels);
+    window.addEventListener('orientationchange', syncCanvasPixels);
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(syncCanvasPixels).observe(stageEl);
+    }
 
     const engine = new Engine({
       canvas: canvasEl,
       executable: 'godot',
       mainPack: '__GAME_PACK_CACHE__',
-      canvasResizePolicy: 2,
+      canvasResizePolicy: 0,
       focusCanvas: true,
       experimentalVK: true,
       serviceWorker: '',
@@ -234,6 +275,13 @@ ITCH_HTML_VERSIONED_ZIP="$REPO_ROOT/dist/hitezero-itch-html-layoutfix-${ITCH_HTM
 mkdir -p "$(dirname "$ITCH_HTML_ZIP")"
 cp -f "$SITE_ZIP_PATH" "$ITCH_HTML_ZIP"
 cp -f "$SITE_ZIP_PATH" "$ITCH_HTML_VERSIONED_ZIP"
+
+# Keep the unzipped itch preview folder in sync so a manual "drag a folder
+# to itch.io" upload — or a local file:// preview — matches what we ship.
+ITCH_HTML_DIR="$REPO_ROOT/dist/hitezero-itch-html"
+rm -rf "$ITCH_HTML_DIR"
+mkdir -p "$ITCH_HTML_DIR"
+cp -R "$SITE_DIR/." "$ITCH_HTML_DIR/"
 
 cat <<EOF
 Build complete.

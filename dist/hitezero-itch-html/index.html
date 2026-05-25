@@ -59,6 +59,11 @@
       }
     }
 
+    /*
+     * Canvas fills the stage. !important + max/min guards beat any inline
+     * style that godot.js's updateSize might re-inject. We also strip those
+     * inline styles defensively via MutationObserver below.
+     */
     #canvas {
       display: block;
       width: 100% !important;
@@ -98,10 +103,17 @@
     const canvasEl = document.getElementById('canvas');
     const stageEl = document.getElementById('stage');
 
-    // --- 잠수함 패치: godot.js의 updateSize가 canvas.style.width/height를
-    //     px 단위 인라인으로 강제 주입하면 stage 폭과 어긋나 좁아진다.
-    //     canvasResizePolicy=0(None)으로 Godot 자체 리사이즈를 끄고,
-    //     인라인 style이 어떤 경로로든 들어오면 즉시 떼어내는 가드를 둔다.
+    // --- 잠수함 패치 / submarine patch:
+    //   godot.js's updateSize() forces canvas.style.width/height to inline
+    //   px values derived from window.innerWidth/innerHeight when
+    //   canvasResizePolicy=2 (Adaptive). On itch.io's wide iframe this makes
+    //   the internal pixel buffer ~1990px while CSS displays the canvas at
+    //   ~743px (4:7 portrait), squashing the game into a narrow vertical
+    //   strip on the right side.
+    //   Fix: canvasResizePolicy=0 (None) disables Godot's auto-resize, and
+    //   a MutationObserver strips any inline width/height that still slips
+    //   in. syncCanvasPixels() then sizes the internal buffer to the
+    //   canvas's actual rendered CSS size x DPR.
     function stripCanvasInlineSize() {
       const s = canvasEl.style;
       if (s.width)     s.removeProperty('width');
@@ -129,7 +141,7 @@
     const engine = new Engine({
       canvas: canvasEl,
       executable: 'godot',
-      mainPack: 'game-019303d5f7f1cd66.zip',
+      mainPack: 'game-17b49aea64534852.zip',
       canvasResizePolicy: 0,
       focusCanvas: true,
       experimentalVK: true,
