@@ -61,8 +61,12 @@
 
     #canvas {
       display: block;
-      width: 100%;
-      height: 100%;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
       outline: none;
       background: #050510;
       border-radius: clamp(0px, 1.2dvh, 14px);
@@ -92,6 +96,22 @@
   <script>
     const statusEl = document.getElementById('status');
     const canvasEl = document.getElementById('canvas');
+    const stageEl = document.getElementById('stage');
+
+    // --- 잠수함 패치: godot.js의 updateSize가 canvas.style.width/height를
+    //     px 단위 인라인으로 강제 주입하면 stage 폭과 어긋나 좁아진다.
+    //     canvasResizePolicy=0(None)으로 Godot 자체 리사이즈를 끄고,
+    //     인라인 style이 어떤 경로로든 들어오면 즉시 떼어내는 가드를 둔다.
+    function stripCanvasInlineSize() {
+      const s = canvasEl.style;
+      if (s.width)     s.removeProperty('width');
+      if (s.height)    s.removeProperty('height');
+      if (s.maxWidth)  s.removeProperty('max-width');
+      if (s.maxHeight) s.removeProperty('max-height');
+    }
+    stripCanvasInlineSize();
+    const styleGuard = new MutationObserver(stripCanvasInlineSize);
+    styleGuard.observe(canvasEl, { attributes: true, attributeFilter: ['style'] });
 
     function syncCanvasPixels() {
       const rect = canvasEl.getBoundingClientRect();
@@ -102,12 +122,15 @@
     syncCanvasPixels();
     window.addEventListener('resize', syncCanvasPixels);
     window.addEventListener('orientationchange', syncCanvasPixels);
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(syncCanvasPixels).observe(stageEl);
+    }
 
     const engine = new Engine({
       canvas: canvasEl,
       executable: 'godot',
       mainPack: 'game-019303d5f7f1cd66.zip',
-      canvasResizePolicy: 1,
+      canvasResizePolicy: 0,
       focusCanvas: true,
       experimentalVK: true,
       serviceWorker: '',
