@@ -285,6 +285,7 @@ func _spawn_knife() -> void:
 	player.play_output(aim_angle)
 	_kick_world(-velocity.normalized(), 2.0, 0.05)
 	_burst_feedback(knife.position, Color(1.0, 0.78, 0.25, 0.82), 12.0, 0.16)
+	AudioManager.play("knife_launch")
 
 
 func _spawn_mini_knife(start_pos: Vector2, angle: float) -> void:
@@ -333,6 +334,7 @@ func _update_knives(delta: float) -> void:
 					velocity = Vector2(sin(bounce_angle) * speed, -cos(bounce_angle) * speed)
 					knife.position.y = tray_rect.position.y - radius
 					_burst_feedback(knife.position, Color(0.29, 0.87, 0.50, 1.0), 12.0, 0.18)
+					AudioManager.play("tray_bounce")
 
 		knife.set_velocity(velocity)
 
@@ -385,6 +387,7 @@ func _hit_block(block: Block) -> void:
 	var remaining_hp := block.take_hit()
 	_burst_feedback(block.global_position, block.get_hit_color(), 14.0, 0.20)
 	_spawn_hit_vfx(block.global_position, block.get_hit_color())
+	AudioManager.play("block_hit")
 	if remaining_hp <= 0:
 		_destroy_block(block)
 
@@ -394,12 +397,16 @@ func _destroy_block(block: Block) -> void:
 	var bpos := block.global_position
 	if block_type == GameConstants.BLOCK_STAR:
 		pending_stars += 1
+		AudioManager.play("block_destroy_star")
 	elif block_type == GameConstants.BLOCK_POW:
 		for index in range(8):
 			var angle := (float(index) / 8.0) * TAU
 			_spawn_mini_knife(block.position, angle)
 		_flash_screen(Color(1.0, 0.25, 1.0, 1.0), 0.55, 0.14)
 		_freeze_frame(0.05)
+		AudioManager.play("block_destroy_pow")
+	else:
+		AudioManager.play("block_destroy_normal")
 
 	_spawn_destroy_vfx(bpos, block_type)
 	score += 100
@@ -434,6 +441,7 @@ func _update_red_enemies(delta: float) -> void:
 		hearts -= 1
 		_burst_feedback(block.global_position, Color(0.94, 0.27, 0.27, 1.0), 18.0, 0.24)
 		_play_hit_reaction()
+		AudioManager.play("enemy_warning")
 		block.queue_free()
 		_emit_ui_update()
 		if hearts <= 0:
@@ -471,6 +479,7 @@ func _trigger_stage_clear() -> void:
 	player.scale = Vector2.ONE
 	stage_cleared.emit(level + 1)
 	_flash_screen(Color(0.35, 1.0, 0.55, 1.0), 0.6, 0.24)
+	AudioManager.play("stage_clear")
 	_emit_ui_update()
 	stage_timer.start(1.2)
 
@@ -488,6 +497,7 @@ func _trigger_game_over() -> void:
 	Session.submit_score(score)
 	game_overed.emit(score, level, Session.best_score)
 	_flash_screen(Color(0.85, 0.15, 0.15, 1.0), 0.65, 0.28)
+	AudioManager.play("game_over")
 	_emit_ui_update()
 
 

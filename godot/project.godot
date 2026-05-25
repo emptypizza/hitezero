@@ -22,6 +22,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 Session="*res://scripts/session.gd"
+AudioManager="*res://scripts/audio_manager.gd"
 
 [display]
 

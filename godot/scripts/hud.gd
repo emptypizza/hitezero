@@ -173,6 +173,7 @@ func _build_ui() -> void:
 	title_button.size = Vector2(72.0, 22.0)
 	_apply_font(title_button, 9)
 	title_button.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
 		title_requested.emit()
 	)
 	root.add_child(title_button)
@@ -245,6 +246,7 @@ func _build_ui() -> void:
 
 
 func _on_collider_button_pressed() -> void:
+	AudioManager.play("ui_click")
 	set_collider_debug(not collider_debug_on)
 	collider_debug_toggled.emit(collider_debug_on)
 
