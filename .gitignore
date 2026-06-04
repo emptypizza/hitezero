@@ -13,3 +13,16 @@ build/
 dist/godot-web/game.zip
 dist/godot-web/hitezero-godot-web-site_nothreads.zip
 dist/hitezero-itch-html.zip
+
+# IDE config
+.cursor/
+
+# Random local assets / installers not part of the project
+assets/OperaSetup.zip
+k8p9W.jpg
+mc95c.jpg
+
+# Local build snapshots and backups
+dist/.submarine_backup/
+dist/_fixed_game_*.png
+dist/netlify-hitezero-*.zip
