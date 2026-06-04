@@ -139,21 +139,24 @@ cat > "$SITE_DIR/index.html" <<'EOF'
     }
 
     /*
-     * Canvas fills the stage. !important + max/min guards beat any inline
-     * style that godot.js's updateSize might re-inject. We also strip those
-     * inline styles defensively via MutationObserver below.
+     * Canvas fills the stage. Godot manages the canvas pixel buffer itself
+     * (canvasResizePolicy=1 → fixed at the project viewport 400x700). The
+     * Godot engine ALSO sets canvas.style.width/height to inline "400px"
+     * values, which would normally beat any external CSS — so we use
+     * !important on width/height only to force the canvas to fill #stage
+     * for display. The browser then scales the 400x700 buffer up to the
+     * #stage's 4:7 box. image-rendering: pixelated keeps the pixel-art
+     * crisp during that upscale.
      */
     #canvas {
       display: block;
       width: 100% !important;
       height: 100% !important;
-      max-width: 100% !important;
-      max-height: 100% !important;
-      min-width: 0 !important;
-      min-height: 0 !important;
       outline: none;
       background: #050510;
       border-radius: clamp(0px, 1.2dvh, 14px);
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
     }
 
     #status {
@@ -168,11 +171,70 @@ cat > "$SITE_DIR/index.html" <<'EOF'
       padding: 8px 10px;
       pointer-events: none;
     }
+
+    /* Loading overlay — gives the user feedback while the ~9-36MB runtime
+     * streams in. Without it the canvas is blank and the load feels frozen,
+     * which drives mobile bounce. Driven by Godot's onProgress callback. */
+    #loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: linear-gradient(160deg, #10182e 0%, #060914 70%);
+      border-radius: inherit;
+      transition: opacity 0.35s ease;
+      z-index: 5;
+    }
+    #loader-title {
+      font-size: clamp(20px, 6dvw, 34px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #dbeafe;
+      text-shadow: 0 0 18px rgba(96, 165, 250, 0.55);
+    }
+    #loader-track {
+      position: relative;
+      width: min(62%, 220px);
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(96, 165, 250, 0.18);
+      overflow: hidden;
+    }
+    #loader-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #a855f7);
+      box-shadow: 0 0 12px rgba(96, 165, 250, 0.7);
+      transition: width 0.2s ease;
+    }
+    #loader-fill.indeterminate {
+      width: 40%;
+      animation: loader-slide 1.1s ease-in-out infinite;
+    }
+    @keyframes loader-slide {
+      0% { transform: translateX(-130%); }
+      100% { transform: translateX(330%); }
+    }
+    #loader-pct {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      color: rgba(219, 234, 254, 0.75);
+      font-variant-numeric: tabular-nums;
+    }
   </style>
 </head>
 <body>
   <div id="stage">
     <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+    <div id="loader">
+      <div id="loader-title">HiteZero</div>
+      <div id="loader-track"><div id="loader-fill"></div></div>
+      <div id="loader-pct">0%</div>
+    </div>
   </div>
   <div id="status">Loading...</div>
 
@@ -180,61 +242,55 @@ cat > "$SITE_DIR/index.html" <<'EOF'
   <script>
     const statusEl = document.getElementById('status');
     const canvasEl = document.getElementById('canvas');
-    const stageEl = document.getElementById('stage');
+    const loaderEl = document.getElementById('loader');
+    const loaderFillEl = document.getElementById('loader-fill');
+    const loaderPctEl = document.getElementById('loader-pct');
 
-    // --- 잠수함 패치 / submarine patch:
-    //   godot.js's updateSize() forces canvas.style.width/height to inline
-    //   px values derived from window.innerWidth/innerHeight when
-    //   canvasResizePolicy=2 (Adaptive). On itch.io's wide iframe this makes
-    //   the internal pixel buffer ~1990px while CSS displays the canvas at
-    //   ~743px (4:7 portrait), squashing the game into a narrow vertical
-    //   strip on the right side.
-    //   Fix: canvasResizePolicy=0 (None) disables Godot's auto-resize, and
-    //   a MutationObserver strips any inline width/height that still slips
-    //   in. syncCanvasPixels() then sizes the internal buffer to the
-    //   canvas's actual rendered CSS size x DPR.
-    function stripCanvasInlineSize() {
-      const s = canvasEl.style;
-      if (s.width)     s.removeProperty('width');
-      if (s.height)    s.removeProperty('height');
-      if (s.maxWidth)  s.removeProperty('max-width');
-      if (s.maxHeight) s.removeProperty('max-height');
-    }
-    stripCanvasInlineSize();
-    const styleGuard = new MutationObserver(stripCanvasInlineSize);
-    styleGuard.observe(canvasEl, { attributes: true, attributeFilter: ['style'] });
-
-    function syncCanvasPixels() {
-      const rect = canvasEl.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvasEl.width = Math.max(1, Math.round(rect.width * dpr));
-      canvasEl.height = Math.max(1, Math.round(rect.height * dpr));
-    }
-    syncCanvasPixels();
-    window.addEventListener('resize', syncCanvasPixels);
-    window.addEventListener('orientationchange', syncCanvasPixels);
-    if ('ResizeObserver' in window) {
-      new ResizeObserver(syncCanvasPixels).observe(stageEl);
-    }
-
+    // Godot manages the canvas pixel buffer itself via
+    // canvasResizePolicy=1 (Project): the buffer is fixed at the project
+    // viewport size (400x700) and the browser scales it via the CSS rules
+    // on #canvas / #stage. This preserves the 4:7 aspect ratio even inside
+    // itch.io's wide iframe, and avoids the WebGL context churn caused by
+    // re-assigning canvas.width/height on resize.
     const engine = new Engine({
       canvas: canvasEl,
       executable: 'godot',
       mainPack: '__GAME_PACK_CACHE__',
-      canvasResizePolicy: 0,
+      canvasResizePolicy: 1,
       focusCanvas: true,
       experimentalVK: true,
       serviceWorker: '',
     });
 
-    engine.startGame().then(() => {
+    function onLoadProgress(current, total) {
+      if (total > 0) {
+        const pct = Math.min(100, Math.round((current / total) * 100));
+        loaderFillEl.classList.remove('indeterminate');
+        loaderFillEl.style.width = pct + '%';
+        loaderPctEl.textContent = pct + '%';
+      } else {
+        // No Content-Length (host not sending size): show MB downloaded.
+        loaderFillEl.classList.add('indeterminate');
+        loaderPctEl.textContent = (current / 1048576).toFixed(1) + ' MB';
+      }
+    }
+
+    function hideLoader() {
+      loaderEl.style.opacity = '0';
+      window.setTimeout(() => { loaderEl.style.display = 'none'; }, 360);
+    }
+
+    engine.startGame({ onProgress: onLoadProgress }).then(() => {
       statusEl.textContent = 'Running';
       window.requestAnimationFrame(() => {
         statusEl.style.display = 'none';
+        hideLoader();
       });
     }).catch((err) => {
       console.error(err);
       statusEl.textContent = `Startup failed: ${err instanceof Error ? err.message : err}`;
+      loaderPctEl.textContent = 'Load failed';
+      loaderFillEl.classList.remove('indeterminate');
     });
   </script>
 </body>

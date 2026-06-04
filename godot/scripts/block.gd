@@ -22,6 +22,16 @@ var enemy_speed: float = 0.0
 var enemy_active: bool = false
 var flash_amount: float = 0.0
 
+# ─── Squash & stretch (visual only — never touches collision AABB) ───────────
+# Applied to the child Sprite2D so global_position / block_size stay intact and
+# gameplay/collision remain deterministic. Decays to rest over SQUASH_TIME.
+const SQUASH_TIME := 0.12        # seconds to recover
+const SQUASH_STRENGTH := 0.34    # compression along impact axis at full hit
+const SQUASH_STRETCH := 0.55     # how much of the squash goes into the cross axis
+const KNOCKBACK_DIST := 4.0      # px the sprite recoils along impact dir
+var _squash_t: float = 0.0       # 1 → 0 over the recovery window
+var _impact_dir := Vector2.ZERO  # unit impact direction in local space
+
 var _base_modulate: Color = Color.WHITE
 
 
@@ -48,6 +58,8 @@ func _draw() -> void:
 func _process(delta: float) -> void:
 	if flash_amount > 0.0:
 		flash_amount = maxf(0.0, flash_amount - delta * 4.0)
+	if _squash_t > 0.0:
+		_squash_t = maxf(0.0, _squash_t - delta / SQUASH_TIME)
 	_update_sprite_modulate()
 	_update_sprite_scale()
 
@@ -75,9 +87,14 @@ func advance_enemy(delta: float) -> void:
 		position.y += enemy_speed * delta
 
 
-func take_hit() -> int:
+func take_hit(impact_dir: Vector2 = Vector2.ZERO) -> int:
 	hp = maxi(0, hp - 1)
 	flash_amount = 1.0
+	# Kick off a directional squash & stretch. Blocks aren't rotated, so the
+	# local impact direction equals the world direction we're handed.
+	if impact_dir.length_squared() > 0.0001:
+		_impact_dir = impact_dir.normalized()
+		_squash_t = 1.0
 	_sync_label()
 	queue_redraw()
 	return hp
@@ -89,6 +106,13 @@ func is_destroyed() -> bool:
 
 func get_aabb() -> Rect2:
 	return Rect2(global_position - block_size * 0.5, block_size)
+
+
+# World-local AABB (relative to the parent layer, which sits at the world
+# origin). Collision compares this against knife.position — also world-local —
+# so a shaking/rotating/zooming `world` node never shifts the hit boxes.
+func get_local_aabb() -> Rect2:
+	return Rect2(position - block_size * 0.5, block_size)
 
 
 func get_hit_color() -> Color:
@@ -172,9 +196,20 @@ func _update_sprite_scale() -> void:
 	if block_type == GameConstants.BLOCK_RED_ENEMY and enemy_active:
 		# Subtle breathing keeps the falling blob alive without adding non-red pixels.
 		var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.035
-		block_sprite.scale = base_scale * pulse
-	else:
-		block_sprite.scale = base_scale
+		base_scale *= pulse
+	block_sprite.scale = base_scale * _squash_scale()
+	block_sprite.position = _impact_dir * (KNOCKBACK_DIST * _squash_t)
+
+
+func _squash_scale() -> Vector2:
+	# Eased squash: compress along the impact axis, bulge the cross axis.
+	if _squash_t <= 0.0:
+		return Vector2.ONE
+	var e := _squash_t * _squash_t  # ease-out so recovery snaps then settles
+	var k := SQUASH_STRENGTH * e
+	if absf(_impact_dir.x) >= absf(_impact_dir.y):
+		return Vector2(1.0 - k, 1.0 + k * SQUASH_STRETCH)
+	return Vector2(1.0 + k * SQUASH_STRETCH, 1.0 - k)
 
 
 func _update_sprite_modulate() -> void:

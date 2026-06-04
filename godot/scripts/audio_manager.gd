@@ -2,21 +2,32 @@ extends Node
 
 # Procedural retro SFX — all sounds generated from PCM math, no external files.
 # Usage: AudioManager.play("sound_name")
+#        AudioManager.play("block_hit", pitch, volume_db_offset)
+#
+# Dynamics: callers pass a pitch (combo ramp) and a volume offset so repeated
+# hits don't sound identical. Players are polyphonic so rapid combo spam and
+# simultaneous multi-hits layer instead of cutting each other off.
 
 const SAMPLE_RATE := 22050
+const MAX_POLYPHONY := 5
+const PITCH_MIN := 0.25
+const PITCH_MAX := 4.0
 
 var _players: Dictionary = {}
+var _base_volume: Dictionary = {}
 
 
 func _ready() -> void:
 	_build_all_sounds()
 
 
-func play(sound_name: String) -> void:
+func play(sound_name: String, pitch: float = 1.0, volume_db_offset: float = 0.0) -> void:
 	if not _players.has(sound_name):
 		return
 	var p: AudioStreamPlayer = _players[sound_name]
-	p.stop()
+	p.pitch_scale = clampf(pitch, PITCH_MIN, PITCH_MAX)
+	p.volume_db = float(_base_volume.get(sound_name, 0.0)) + volume_db_offset
+	# No stop(): polyphony lets overlapping plays layer for combo machine-gun feel.
 	p.play()
 
 
@@ -31,6 +42,8 @@ func _build_all_sounds() -> void:
 	_add("game_over",            _gen_game_over(),            -2.0)
 	_add("tray_bounce",          _gen_tray_bounce(),          -5.0)
 	_add("ui_click",             _gen_ui_click(),             -8.0)
+	# Low-frequency impact body layered under destruction sounds for weight.
+	_add("block_subthump",       _gen_subthump(),             -4.0)
 
 
 func _add(sound_name: String, stream: AudioStreamWAV, volume_db: float) -> void:
@@ -38,8 +51,10 @@ func _add(sound_name: String, stream: AudioStreamWAV, volume_db: float) -> void:
 	p.stream = stream
 	p.volume_db = volume_db
 	p.bus = "Master"
+	p.max_polyphony = MAX_POLYPHONY
 	add_child(p)
 	_players[sound_name] = p
+	_base_volume[sound_name] = volume_db
 
 
 func _make_wav(buf: PackedFloat32Array) -> AudioStreamWAV:
@@ -239,4 +254,22 @@ func _gen_ui_click() -> AudioStreamWAV:
 		var t := float(i) / float(SAMPLE_RATE)
 		var env := exp(-t * 95.0)
 		buf[i] = (sin(TAU * 3000.0 * t) * 0.5 + randf_range(-1.0, 1.0) * 0.5) * env * 0.5
+	return _make_wav(buf)
+
+
+func _gen_subthump() -> AudioStreamWAV:
+	# Short low-frequency body ("thump") layered under destroy sounds to add
+	# physical weight. Descending sine 90→45 Hz with a soft click attack, 0.12 s.
+	var dur := 0.12
+	var n := int(SAMPLE_RATE * dur)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var phase := 0.0
+	for i in range(n):
+		var t := float(i) / float(SAMPLE_RATE)
+		var env := exp(-t * 22.0)
+		var freq := lerpf(90.0, 45.0, t / dur)
+		phase += TAU * freq / float(SAMPLE_RATE)
+		var click := randf_range(-1.0, 1.0) * exp(-t * 240.0) * 0.25
+		buf[i] = clampf((sin(phase) * 0.85 + click) * env, -1.0, 1.0)
 	return _make_wav(buf)

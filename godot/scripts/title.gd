@@ -6,6 +6,10 @@ const BG_TEX: Texture2D = preload("res://assets/textures/bg/bg.png")
 
 var how_to_modal: PanelContainer
 var best_score_label: Label
+var coins_label: Label
+var shop_modal: PanelContainer
+var shop_vbox: VBoxContainer
+var stats_modal: PanelContainer
 
 
 func _ready() -> void:
@@ -111,13 +115,46 @@ func _build_layout() -> void:
 	how_to_button.pressed.connect(_on_how_to_pressed)
 	button_box.add_child(how_to_button)
 
+	var sub_row := HBoxContainer.new()
+	sub_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	sub_row.add_theme_constant_override("separation", 12)
+	button_box.add_child(sub_row)
+
+	var shop_button := Button.new()
+	shop_button.text = "Upgrades"
+	shop_button.custom_minimum_size = Vector2(110.0, 40.0)
+	shop_button.add_theme_color_override("font_color", Color(0.98, 0.82, 0.26, 1.0))
+	shop_button.add_theme_stylebox_override("normal", _make_button_style(Color(0.10, 0.08, 0.02, 0.80), Color(0.98, 0.82, 0.26, 0.70)))
+	shop_button.add_theme_stylebox_override("hover", _make_button_style(Color(0.16, 0.14, 0.04, 0.90), Color(1.0, 0.90, 0.42, 1.0)))
+	shop_button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.08, 0.06, 0.01, 0.95), Color(0.90, 0.72, 0.18, 1.0)))
+	shop_button.pressed.connect(_on_shop_pressed)
+	sub_row.add_child(shop_button)
+
+	var stats_button := Button.new()
+	stats_button.text = "Stats"
+	stats_button.custom_minimum_size = Vector2(110.0, 40.0)
+	stats_button.add_theme_color_override("font_color", Color(0.70, 0.85, 1.0, 1.0))
+	stats_button.add_theme_stylebox_override("normal", _make_button_style(Color(0.04, 0.08, 0.16, 0.80), Color(0.40, 0.65, 1.0, 0.55)))
+	stats_button.add_theme_stylebox_override("hover", _make_button_style(Color(0.08, 0.14, 0.28, 0.90), Color(0.55, 0.80, 1.0, 0.90)))
+	stats_button.add_theme_stylebox_override("pressed", _make_button_style(Color(0.03, 0.06, 0.12, 0.95), Color(0.35, 0.58, 0.90, 0.90)))
+	stats_button.pressed.connect(_on_stats_pressed)
+	sub_row.add_child(stats_button)
+
 	best_score_label = Label.new()
 	best_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	best_score_label.custom_minimum_size = Vector2(0.0, 28.0)
-	best_score_label.add_theme_font_size_override("font_size", 16)
+	best_score_label.custom_minimum_size = Vector2(0.0, 20.0)
+	best_score_label.add_theme_font_size_override("font_size", 14)
 	best_score_label.modulate = Color(0.99, 0.91, 0.42, 1.0)
-	best_score_label.text = "Best Score: %d" % Session.best_score
+	best_score_label.text = "Best: %d  Stage: %d" % [Session.best_score, Session.best_stage]
 	button_box.add_child(best_score_label)
+
+	coins_label = Label.new()
+	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coins_label.custom_minimum_size = Vector2(0.0, 20.0)
+	coins_label.add_theme_font_size_override("font_size", 14)
+	coins_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
+	coins_label.text = "Coins: %d" % Session.coins
+	button_box.add_child(coins_label)
 
 	var footer := Label.new()
 	footer.text = "Keyboard: A/D or Arrows   Pointer: drag to aim"
@@ -129,6 +166,8 @@ func _build_layout() -> void:
 	add_child(footer)
 
 	_build_modal()
+	_build_shop_modal()
+	_build_stats_modal()
 
 
 func _apply_label_shadow(label: Label, shadow_color: Color, outline_size: int) -> void:
@@ -214,9 +253,181 @@ func _build_modal() -> void:
 	modal_vbox.add_child(close_button)
 
 
+func _build_shop_modal() -> void:
+	shop_modal = PanelContainer.new()
+	shop_modal.visible = false
+	shop_modal.position = Vector2(16.0, 60.0)
+	shop_modal.size = Vector2(GameConstants.CANVAS_WIDTH - 32.0, 560.0)
+	shop_modal.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.05, 0.10, 0.96), Color(0.98, 0.82, 0.26, 0.45)))
+	add_child(shop_modal)
+
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.offset_left = 12.0
+	scroll.offset_top = 12.0
+	scroll.offset_right = -12.0
+	scroll.offset_bottom = -12.0
+	shop_modal.add_child(scroll)
+
+	shop_vbox = VBoxContainer.new()
+	shop_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_vbox.add_theme_constant_override("separation", 6)
+	scroll.add_child(shop_vbox)
+
+	_refresh_shop()
+
+
+func _refresh_shop() -> void:
+	for c in shop_vbox.get_children():
+		c.queue_free()
+
+	var title := Label.new()
+	title.text = "UPGRADES"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	title.modulate = Color(0.98, 0.82, 0.26, 1.0)
+	shop_vbox.add_child(title)
+
+	var coin_info := Label.new()
+	coin_info.text = "Coins: %d" % Session.coins
+	coin_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coin_info.add_theme_font_size_override("font_size", 14)
+	coin_info.modulate = Color(0.98, 0.82, 0.26, 0.85)
+	shop_vbox.add_child(coin_info)
+
+	for u in Session.UPGRADES:
+		var key: String = u["key"]
+		var current := Session.get_upgrade_level(key)
+		var max_level: int = u["max"]
+		var is_maxed := current >= max_level
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		shop_vbox.add_child(row)
+
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_constant_override("separation", 2)
+		row.add_child(info)
+
+		var name_label := Label.new()
+		name_label.text = "%s [%d/%d]" % [u["name"], current, max_level]
+		name_label.add_theme_font_size_override("font_size", 13)
+		name_label.modulate = Color(0.95, 0.95, 1.0, 1.0)
+		info.add_child(name_label)
+
+		var desc_label := Label.new()
+		desc_label.text = u["desc"]
+		desc_label.add_theme_font_size_override("font_size", 10)
+		desc_label.modulate = Color(0.65, 0.70, 0.80, 1.0)
+		info.add_child(desc_label)
+
+		var buy_button := Button.new()
+		if is_maxed:
+			buy_button.text = "MAX"
+			buy_button.disabled = true
+		else:
+			var cost: int = u["costs"][current]
+			buy_button.text = "%d" % cost
+			buy_button.disabled = Session.coins < cost
+			var captured_key := key
+			buy_button.pressed.connect(func() -> void:
+				if Session.try_purchase_upgrade(captured_key):
+					_refresh_shop()
+					if coins_label != null:
+						coins_label.text = "Coins: %d" % Session.coins
+			)
+		buy_button.custom_minimum_size = Vector2(70.0, 36.0)
+		buy_button.add_theme_font_size_override("font_size", 12)
+		row.add_child(buy_button)
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(0.0, 40.0)
+	close_btn.pressed.connect(func() -> void:
+		shop_modal.visible = false
+	)
+	shop_vbox.add_child(close_btn)
+
+
+func _build_stats_modal() -> void:
+	stats_modal = PanelContainer.new()
+	stats_modal.visible = false
+	stats_modal.position = Vector2(24.0, 100.0)
+	stats_modal.size = Vector2(GameConstants.CANVAS_WIDTH - 48.0, 440.0)
+	stats_modal.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.05, 0.10, 0.96), Color(0.40, 0.65, 1.0, 0.45)))
+	add_child(stats_modal)
+
+	var vbox := VBoxContainer.new()
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.offset_left = 16.0
+	vbox.offset_top = 16.0
+	vbox.offset_right = -16.0
+	vbox.offset_bottom = -16.0
+	vbox.add_theme_constant_override("separation", 8)
+	stats_modal.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "STATS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	title.modulate = Color(0.70, 0.85, 1.0, 1.0)
+	vbox.add_child(title)
+
+	var stats: Array = [
+		["Total Runs", str(Session.total_runs)],
+		["Best Score", str(Session.best_score)],
+		["Best Stage", str(Session.best_stage)],
+		["Best Combo", str(Session.best_combo)],
+		["Blocks Destroyed", str(Session.total_blocks_destroyed)],
+		["Enemies Destroyed", str(Session.total_enemies_destroyed)],
+		["Bosses Defeated", str(Session.total_bosses_defeated)],
+		["Items Collected", str(Session.total_items_collected)],
+		["Total Coins Earned", str(Session.coins)],
+	]
+
+	for stat in stats:
+		var row := HBoxContainer.new()
+		vbox.add_child(row)
+
+		var label := Label.new()
+		label.text = stat[0]
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.add_theme_font_size_override("font_size", 13)
+		label.modulate = Color(0.80, 0.85, 0.95, 1.0)
+		row.add_child(label)
+
+		var value := Label.new()
+		value.text = stat[1]
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value.add_theme_font_size_override("font_size", 13)
+		value.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		row.add_child(value)
+
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.custom_minimum_size = Vector2(0.0, 40.0)
+	close_btn.pressed.connect(func() -> void:
+		stats_modal.visible = false
+	)
+	vbox.add_child(close_btn)
+
+
 func _on_start_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/game.tscn")
 
 
 func _on_how_to_pressed() -> void:
 	how_to_modal.visible = true
+
+
+func _on_shop_pressed() -> void:
+	_refresh_shop()
+	shop_modal.visible = true
+
+
+func _on_stats_pressed() -> void:
+	# Rebuild stats modal to show current values
+	stats_modal.queue_free()
+	_build_stats_modal()
+	stats_modal.visible = true
