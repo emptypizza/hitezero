@@ -168,6 +168,10 @@ func _process(delta: float) -> void:
 
 
 func _exit_tree() -> void:
+	# The game-over sequence holds Engine.time_scale at 0.3 for 0.5s; if the
+	# scene is torn down inside that window the awaiting coroutine dies before
+	# restoring it, so reset here or the title scene inherits the slow-mo.
+	Engine.time_scale = 1.0
 	_clear_web_bridge_state()
 
 
@@ -728,10 +732,14 @@ func _run_game_over_sequence() -> void:
 	# 0.5s real time — restore time scale
 	await get_tree().create_timer(0.5, true, false, true).timeout
 	Engine.time_scale = 1.0
+	if state != GameConstants.GameState.GAME_OVER:
+		return  # player already tapped to restart during the slow-mo window
 
 	# Brief red flash then show overlay
 	_flash_screen(Color(0.85, 0.15, 0.15, 1.0), 0.65, 0.28)
 	await get_tree().create_timer(0.1, true, false, true).timeout
+	if state != GameConstants.GameState.GAME_OVER:
+		return
 	game_overed.emit(score, level, Session.best_score)
 
 
