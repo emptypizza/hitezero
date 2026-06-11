@@ -13,6 +13,8 @@ build/
 dist/godot-web/game.zip
 dist/godot-web/hitezero-godot-web-site_nothreads.zip
 dist/hitezero-itch-html.zip
+dist/hitezero-itch-html-*.zip
+dist/hitezero-itch-html/
 
 # IDE config
 .cursor/
