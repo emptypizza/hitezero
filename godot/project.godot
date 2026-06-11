@@ -30,7 +30,6 @@ Haptics="*res://scripts/haptics.gd"
 window/size/viewport_width=400
 window/size/viewport_height=700
 window/stretch/mode="viewport"
-window/stretch/aspect="keep"
 
 [dotnet]
 
