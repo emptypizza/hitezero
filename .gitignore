@@ -1,11 +1,30 @@
-# Web (Vite / Phaser)
-phaser/node_modules/
-phaser/dist/
-pj0zero/node_modules/
-pj0zero/dist/
+# Godot
 godot/.godot/
 godot/build/
 build/
 
 # OS
 .DS_Store
+
+# Agent / local worktrees
+.claude/worktrees/
+
+# Redundant local export zips (use godot/tools/build_web.sh; site_nothreads/ may still track game.zip)
+dist/godot-web/game.zip
+dist/godot-web/hitezero-godot-web-site_nothreads.zip
+dist/hitezero-itch-html.zip
+dist/hitezero-itch-html-*.zip
+dist/hitezero-itch-html/
+
+# IDE config
+.cursor/
+
+# Random local assets / installers not part of the project
+assets/OperaSetup.zip
+k8p9W.jpg
+mc95c.jpg
+
+# Local build snapshots and backups
+dist/.submarine_backup/
+dist/_fixed_game_*.png
+dist/netlify-hitezero-*.zip

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Logs push-time env when Git reaches this hook (after remote resolution). Opt out: HITEZERO_SKIP_PUSH_LOG=1
+# If push dies earlier (e.g. credential / askpass), run: bash godot/tools/log_push_env_to_debug_log.sh && git push
+[[ -n "${HITEZERO_SKIP_PUSH_LOG:-}" ]] && exit 0
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+bash "$ROOT/godot/tools/log_push_env_to_debug_log.sh" ".githooks/pre-push" "pre_push_hook" 2>/dev/null || true
+exit 0

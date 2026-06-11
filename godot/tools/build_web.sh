@@ -11,6 +11,34 @@ SITE_ZIP_PATH="$OUTPUT_ROOT/hitezero-godot-web-site_nothreads.zip"
 PORT="${PORT:-8123}"
 PRESET_NAME="${GODOT_WEB_PRESET:-Web}"
 
+# Catch one-line paste like: .../build_web.sh dist/godot-webpython3 -m http.server ...
+if [[ -n "${1:-}" ]]; then
+	case "$1" in
+		*webpython* | *http.server*)
+			echo "ERROR: First argument to build_web.sh looks merged with a python/http.server command: '$1'" >&2
+			echo "Run the build alone, then on the next line start the static server (see README Build For Web)." >&2
+			exit 1
+			;;
+	esac
+fi
+
+# Same paste pattern but with a space: .../build_web.sh dist/godot-web python3 -m http.server ...
+# Those become \$2, \$3, ... here; the server never runs unless it is a separate shell command.
+if [[ $# -gt 1 ]]; then
+	echo "ERROR: Too many arguments ($#): only one optional output directory is allowed." >&2
+	echo "Extra tokens look like a pasted http.server command: ${*:2}" >&2
+	echo "Run: bash \"$SCRIPT_DIR/build_web.sh\" <out-dir>   then on the next line: python3 -m http.server ..." >&2
+	echo "Or from repo root: make godot-web && make godot-web-serve" >&2
+	exit 1
+fi
+
+if [[ "$OUTPUT_ROOT" != /* ]]; then
+  OUTPUT_ROOT="$REPO_ROOT/$OUTPUT_ROOT"
+  SITE_DIR="$OUTPUT_ROOT/site_nothreads"
+  PACK_PATH="$OUTPUT_ROOT/game.zip"
+  SITE_ZIP_PATH="$OUTPUT_ROOT/hitezero-godot-web-site_nothreads.zip"
+fi
+
 if ! command -v godot >/dev/null 2>&1; then
   echo "godot CLI is required." >&2
   exit 1
@@ -43,79 +71,246 @@ with zipfile.ZipFile(template_zip) as zf:
 shutil.copy2(pack_zip, os.path.join(site_dir, "game.zip"))
 PY
 
+# Content-addressed pack name so browsers fetch a new URL each build (query strings break --main-pack / VFS paths).
+GAME_PACK_CACHE_TAG="$(shasum -a 256 "$PACK_PATH" | awk '{print substr($1,1,16)}')"
+GAME_PACK_BASENAME="game-${GAME_PACK_CACHE_TAG}.zip"
+mv "$SITE_DIR/game.zip" "$SITE_DIR/$GAME_PACK_BASENAME"
+
 cat > "$SITE_DIR/index.html" <<'EOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-  <title>HiteZero Godot Web</title>
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#050510">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>HiteZero</title>
   <style>
+    :root {
+      --accent: rgba(96, 165, 250, 0.6);
+      --accent-soft: rgba(96, 165, 250, 0.22);
+      --bezel: #0b1324;
+    }
+
     html, body {
       margin: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
       background: #050510;
+      color: #dbeafe;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
       display: grid;
       place-items: center;
+      background:
+        radial-gradient(ellipse at 20% 10%, rgba(56, 189, 248, 0.12), transparent 55%),
+        radial-gradient(ellipse at 85% 90%, rgba(168, 85, 247, 0.10), transparent 60%),
+        #050510;
     }
 
+    #stage {
+      position: relative;
+      display: block;
+      height: min(100dvh, calc(100dvw * 7 / 4));
+      aspect-ratio: 4 / 7;
+      max-width: 100dvw;
+      padding: clamp(0px, 1.2dvh, 14px);
+      border-radius: clamp(0px, 1.8dvh, 22px);
+      background: linear-gradient(160deg, #10182e 0%, #060914 70%);
+      box-shadow:
+        0 0 0 1px var(--accent-soft),
+        0 20px 60px rgba(0, 0, 0, 0.55),
+        0 0 80px rgba(96, 165, 250, 0.18);
+    }
+
+    /* On narrow/portrait viewports the bezel hugs the edges */
+    @media (max-aspect-ratio: 4/7) {
+      #stage {
+        width: 100dvw;
+        height: auto;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+
+    /*
+     * Canvas fills the stage. Godot manages the canvas pixel buffer itself
+     * (canvasResizePolicy=1 → fixed at the project viewport 400x700). The
+     * Godot engine ALSO sets canvas.style.width/height to inline "400px"
+     * values, which would normally beat any external CSS — so we use
+     * !important on width/height only to force the canvas to fill #stage
+     * for display. The browser then scales the 400x700 buffer up to the
+     * #stage's 4:7 box. image-rendering: pixelated keeps the pixel-art
+     * crisp during that upscale.
+     */
     #canvas {
       display: block;
-      width: min(100vw, 57.14vh);
-      height: min(175vw, 100vh);
-      aspect-ratio: 4 / 7;
+      width: 100% !important;
+      height: 100% !important;
       outline: none;
       background: #050510;
+      border-radius: clamp(0px, 1.2dvh, 14px);
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
     }
 
     #status {
       position: fixed;
       left: 12px;
       bottom: 12px;
-      color: #dbeafe;
-      font: 12px/1.4 sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
       background: rgba(15, 23, 42, 0.72);
-      border: 1px solid rgba(96, 165, 250, 0.35);
+      border: 1px solid var(--accent);
       border-radius: 8px;
       padding: 8px 10px;
+      pointer-events: none;
+    }
+
+    /* Loading overlay — gives the user feedback while the ~9-36MB runtime
+     * streams in. Without it the canvas is blank and the load feels frozen,
+     * which drives mobile bounce. Driven by Godot's onProgress callback. */
+    #loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: linear-gradient(160deg, #10182e 0%, #060914 70%);
+      border-radius: inherit;
+      transition: opacity 0.35s ease;
+      z-index: 5;
+    }
+    #loader-title {
+      font-size: clamp(20px, 6dvw, 34px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #dbeafe;
+      text-shadow: 0 0 18px rgba(96, 165, 250, 0.55);
+    }
+    #loader-track {
+      position: relative;
+      width: min(62%, 220px);
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(96, 165, 250, 0.18);
+      overflow: hidden;
+    }
+    #loader-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #a855f7);
+      box-shadow: 0 0 12px rgba(96, 165, 250, 0.7);
+      transition: width 0.2s ease;
+    }
+    #loader-fill.indeterminate {
+      width: 40%;
+      animation: loader-slide 1.1s ease-in-out infinite;
+    }
+    @keyframes loader-slide {
+      0% { transform: translateX(-130%); }
+      100% { transform: translateX(330%); }
+    }
+    #loader-pct {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      color: rgba(219, 234, 254, 0.75);
+      font-variant-numeric: tabular-nums;
     }
   </style>
 </head>
 <body>
-  <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
-  <div id="status">Loading Godot Web build...</div>
+  <div id="stage">
+    <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+    <div id="loader">
+      <div id="loader-title">HiteZero</div>
+      <div id="loader-track"><div id="loader-fill"></div></div>
+      <div id="loader-pct">0%</div>
+    </div>
+  </div>
+  <div id="status">Loading...</div>
 
   <script src="godot.js"></script>
   <script>
     const statusEl = document.getElementById('status');
+    const canvasEl = document.getElementById('canvas');
+    const loaderEl = document.getElementById('loader');
+    const loaderFillEl = document.getElementById('loader-fill');
+    const loaderPctEl = document.getElementById('loader-pct');
+
+    // Godot manages the canvas pixel buffer itself via
+    // canvasResizePolicy=1 (Project): the buffer is fixed at the project
+    // viewport size (400x700) and the browser scales it via the CSS rules
+    // on #canvas / #stage. This preserves the 4:7 aspect ratio even inside
+    // itch.io's wide iframe, and avoids the WebGL context churn caused by
+    // re-assigning canvas.width/height on resize.
     const engine = new Engine({
-      canvas: document.getElementById('canvas'),
+      canvas: canvasEl,
       executable: 'godot',
-      mainPack: 'game.zip',
-      canvasResizePolicy: 0,
+      mainPack: '__GAME_PACK_CACHE__',
+      canvasResizePolicy: 1,
       focusCanvas: true,
       experimentalVK: true,
       serviceWorker: '',
     });
 
-    engine.startGame().then(() => {
+    function onLoadProgress(current, total) {
+      if (total > 0) {
+        const pct = Math.min(100, Math.round((current / total) * 100));
+        loaderFillEl.classList.remove('indeterminate');
+        loaderFillEl.style.width = pct + '%';
+        loaderPctEl.textContent = pct + '%';
+      } else {
+        // No Content-Length (host not sending size): show MB downloaded.
+        loaderFillEl.classList.add('indeterminate');
+        loaderPctEl.textContent = (current / 1048576).toFixed(1) + ' MB';
+      }
+    }
+
+    function hideLoader() {
+      loaderEl.style.opacity = '0';
+      window.setTimeout(() => { loaderEl.style.display = 'none'; }, 360);
+    }
+
+    engine.startGame({ onProgress: onLoadProgress }).then(() => {
       statusEl.textContent = 'Running';
       window.requestAnimationFrame(() => {
         statusEl.style.display = 'none';
+        hideLoader();
       });
     }).catch((err) => {
       console.error(err);
       statusEl.textContent = `Startup failed: ${err instanceof Error ? err.message : err}`;
+      loaderPctEl.textContent = 'Load failed';
+      loaderFillEl.classList.remove('indeterminate');
     });
   </script>
 </body>
 </html>
 EOF
+
+sed -i.bak "s|__GAME_PACK_CACHE__|${GAME_PACK_BASENAME}|g" "$SITE_DIR/index.html" && rm -f "$SITE_DIR/index.html.bak"
+
+if grep -q '__GAME_PACK_CACHE__' "$SITE_DIR/index.html"; then
+	echo "ERROR: index.html still contains __GAME_PACK_CACHE__ placeholder." >&2
+	exit 1
+fi
+RESOLVED_PACK="$(sed -n "s/.*mainPack:[[:space:]]*'\\([^']*\\)'.*/\\1/p" "$SITE_DIR/index.html")"
+if [[ -z "$RESOLVED_PACK" || ! -f "$SITE_DIR/$RESOLVED_PACK" ]]; then
+	echo "ERROR: index.html mainPack '${RESOLVED_PACK:-<empty>}' not found in $SITE_DIR" >&2
+	exit 1
+fi
+
+# Template godot.html still has unreplaced \$GODOT_* placeholders; only custom index.html is valid for this pipeline.
+rm -f "$SITE_DIR/godot.html"
 
 python3 - <<'PY' "$SITE_DIR" "$SITE_ZIP_PATH"
 import os, sys, zipfile
@@ -129,11 +324,29 @@ with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.write(full_path, rel_path)
 PY
 
+# itch.io upload alias (see godot/docs/itchio_release.md): same bytes as site zip
+ITCH_HTML_ZIP="$REPO_ROOT/dist/hitezero-itch-html.zip"
+ITCH_HTML_CACHE_TAG="$(shasum -a 256 "$SITE_DIR/index.html" "$SITE_DIR/$GAME_PACK_BASENAME" | shasum -a 256 | awk '{print substr($1,1,16)}')"
+ITCH_HTML_VERSIONED_ZIP="$REPO_ROOT/dist/hitezero-itch-html-layoutfix-${ITCH_HTML_CACHE_TAG}.zip"
+mkdir -p "$(dirname "$ITCH_HTML_ZIP")"
+cp -f "$SITE_ZIP_PATH" "$ITCH_HTML_ZIP"
+cp -f "$SITE_ZIP_PATH" "$ITCH_HTML_VERSIONED_ZIP"
+
+# Keep the unzipped itch preview folder in sync so a manual "drag a folder
+# to itch.io" upload — or a local file:// preview — matches what we ship.
+ITCH_HTML_DIR="$REPO_ROOT/dist/hitezero-itch-html"
+rm -rf "$ITCH_HTML_DIR"
+mkdir -p "$ITCH_HTML_DIR"
+cp -R "$SITE_DIR/." "$ITCH_HTML_DIR/"
+
 cat <<EOF
 Build complete.
 - Pack: $PACK_PATH
+- Main pack in site: $GAME_PACK_BASENAME
 - Site: $SITE_DIR
 - Site zip: $SITE_ZIP_PATH
+- Itch upload copy: $ITCH_HTML_ZIP
+- Itch versioned upload copy: $ITCH_HTML_VERSIONED_ZIP
 - Serve: python3 -m http.server $PORT --directory "$SITE_DIR"
 - URL: http://127.0.0.1:$PORT/index.html
 EOF

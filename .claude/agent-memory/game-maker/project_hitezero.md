@@ -1,11 +1,11 @@
 ---
 name: HiteZero project setup
-description: Godot 4 2D action game prototype -- wave survival, GDScript, GL Compatibility renderer, 1280x720 viewport
+description: Godot 4 action game prototype with web export and 400x700 portrait gameplay
 type: project
 ---
 
-HiteZero is a Godot 4.2+ 2D action game where the player survives waves of enemies, graded on hits taken (zero hits = perfect).
+HiteZero is a Godot 4 action game focused on portrait knife-throw gameplay, stage progression, and web delivery.
 
-**Why:** Initial prototype built from scratch in an empty repo. Uses GDScript with GL Compatibility renderer for broad hardware support.
+**Why:** The project is being consolidated around the Godot implementation and reproducible web builds.
 
-**How to apply:** All scenes live in `scenes/`, scripts in `scripts/`, assets in `assets/`. The game uses Polygon2D nodes for all visuals (no external sprites), so it runs without any imported art assets. Physics layers: 1=player, 2=enemies, 3=player_attack. Main scene entry point is `main_menu.tscn`.
+**How to apply:** Main game code lives in `godot/`, with editor entry at `godot/project.godot` and web assembly handled by `godot/tools/build_web.sh`.

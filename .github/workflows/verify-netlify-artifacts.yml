@@ -1,0 +1,31 @@
+# Fails the check when netlify.toml exists but the published folder is missing.
+# This catches "Netlify Page not found" caused by an empty or wrong publish directory on GitHub.
+name: Verify Netlify publish artifacts
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check publish tree when Netlify config is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f netlify.toml ]]; then
+            echo "skip: no netlify.toml on this ref"
+            exit 0
+          fi
+          if [[ ! -f dist/godot-web/site_nothreads/index.html ]]; then
+            echo "::error::netlify.toml exists but dist/godot-web/site_nothreads/index.html is missing."
+            echo "Run locally: bash godot/tools/build_web.sh dist/godot-web"
+            echo "Then: git add dist/godot-web/site_nothreads && git commit && git push"
+            exit 1
+          fi
+          echo "ok: dist/godot-web/site_nothreads is present"

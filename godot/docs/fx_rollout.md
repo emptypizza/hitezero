@@ -18,7 +18,7 @@ This Godot port intentionally splits visual effects into two stages so the core 
 
 ## Why These Effects Are Deferred
 - The target platform is Godot Web export with the Compatibility renderer.
-- Phaser used WebGL post pipelines directly, but Godot needs shader rewrites and they are more likely to hurt mobile browser performance.
+- Full-screen shader passes are more likely to hurt mobile browser performance than the current lightweight effects.
 - Stage 1 needs gameplay parity and browser stability before adding expensive screen-space effects.
 
 ## Re-introduction Order
