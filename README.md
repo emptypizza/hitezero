@@ -1,84 +1,101 @@
 # HiteZero
 
-HiteZero is now maintained as a Godot 4 project.
+> Survive waves of enemies. Take zero hits.
 
-## Project Layout
-- `godot/` - main game project
-- `godot/tools/build_web.sh` - reproducible web build script
-- `godot/tools/build_and_serve_web.sh` - build then start `http.server` in one command (safest local loop)
-- `godot/tools/dev_doctor.sh` - print git origin / 401 hints, tool PATH checks, web commands
-- `godot/tools/git_push_interactive.sh` - `git push` with `GIT_ASKPASS` unset (Cursor 401 / askpass workaround)
-- `godot/tools/erase_github_https_keychain.sh` - macOS: clear stale **github.com** HTTPS credentials from Keychain (401 after PAT expired)
-- `godot/tools/log_push_env_to_debug_log.sh` - append Git/Cursor env to `.cursor/debug-2272c4.log` (run right before `git push`)
-- `godot/tools/enable_repo_hooks.sh` - set `core.hooksPath` to `.githooks/` (optional **pre-push** log; may not run if push fails at credential)
-- `build/godot-web/` - default local output (gitignored)
-- `dist/godot-web/site_nothreads/` - committed web bundle used for Netlify when present on the deployed branch
+세로 화면(400×700) 아케이드 게임. 바닥의 파들(paddle)을 드래그해서 나이프 세례를 발사하고, 화면 위의 블록을 깨며 진행합니다. 별(STAR) 블록을 모두 부수면 스테이지 클리어, 빨간 적(RED_ENEMY)이 바닥에 닿거나 하트가 0이 되면 게임 오버입니다. 스프라이트 아틀라스의 한글 제목은 "유성막기"입니다.
 
-## Run In Godot
-Open `godot/project.godot` in Godot 4.6+.
+Godot 4.4 + GDScript로 작성됐고, 데스크톱과 웹(no-threads) 양쪽으로 빌드됩니다. 그림 에셋 없이도 돌아가도록 모든 비주얼이 프로시저럴 드로잉으로 구현돼 있습니다.
 
-## Build For Web
-```bash
-bash "godot/tools/build_web.sh"
+## 프로젝트 구조
+
+```
+/                       Godot 프로젝트 루트
+├── project.godot       엔진 설정 (4.4, GL Compatibility, 400×700 portrait)
+├── export_presets.cfg  웹 export preset
+├── icon.svg            앱 아이콘
+├── scenes/             .tscn (boot / title / game / hud / player / knife / block)
+├── scripts/            .gd (game_root, level_generator, 각 엔티티, session 등)
+├── docs/               패리티 스펙, 웹 검증 로그, FX 롤아웃 노트
+├── tools/              build_web.sh, QA 테스트 액션
+├── progress.md         마이그레이션 로그
+└── LICENSE
 ```
 
-The script exports the game pack, assembles a no-threads browser runtime, and writes output to `build/godot-web/` by default.
+이전에는 같은 리포 안에 [phaser/](phaser/), [pj0zero/](pj0zero/), 그리고 루트 레벨 Godot까지 총 4개의 구현이 섞여 있었는데, Godot 포트만 남기고 전부 정리했습니다. 배경은 [progress.md](progress.md)와 [docs/phaser_parity_spec.md](docs/phaser_parity_spec.md)를 참고하세요.
 
-**Easiest local preview (one command, no paste traps):**
+## 게임플레이
 
-```bash
-bash "godot/tools/build_and_serve_web.sh" "dist/godot-web"
-```
+- **조준 (AIMING)** — 드래그로 발사 각도 지정. 점선 가이드 표시, 각도는 바닥으로 못 쏘게 클램프.
+- **발사 (SHOOTING)** — 놓으면 나이프가 66ms 간격으로 720 px/s로 발사됨. 이때부터 빨간 적이 낙하 시작.
+- **튕겨내기** — 비행 중에도 파들을 좌우로 움직일 수 있고, 내려오는 나이프가 파들에 닿으면 타격 위치에 따라 반사각이 결정됨.
 
-Or from the repo root: `make godot-web-dev` (override port: `PORT=9000 make godot-web-dev`).
+### 블록 타입
 
-For Netlify, build into the repo-root publish folder (two lines is fine if you prefer):
+| 타입 | HP | 효과 |
+|---|---|---|
+| `NORMAL` | 현재 레벨 | 일반 벽돌 |
+| `STAR` | 1 | 전부 부수면 스테이지 클리어 |
+| `POW` | 1 | 파괴 시 60% 속도의 미니 나이프 8개로 폭발 |
+| `RED_ENEMY` | 현재 레벨 | 발사 후 낙하 시작, 바닥 닿으면 하트 -1 |
 
-```bash
-bash "godot/tools/build_web.sh" "dist/godot-web"
-python3 -m http.server 8123 --directory "dist/godot-web/site_nothreads"
-```
+### 종료 조건
 
-Do not append `python3` to the same line as `build_web.sh`’s path. The build script **refuses** a merged path (`webpython`), **extra arguments** (a pasted `python3 -m http.server` tail), or use **`make godot-web`** then **`make godot-web-serve`**.
+- **스테이지 클리어** — 모든 `STAR` 블록 제거. 남은 나이프 수는 다음 스테이지로 이월.
+- **게임 오버** — (A) 모든 나이프가 비활성 상태이고 스폰 대기열이 비었을 때, 또는 (B) 하트가 0이 됐을 때.
 
-## Netlify
-Configuration is in `netlify.toml` at the repository root (`publish = "dist/godot-web/site_nothreads"`).
+## 실행 방법
 
-**GitHub must contain the built folder.** If your fixes exist only on your laptop, Netlify will keep serving an old tree or return “Page not found”. Push the branch that includes `dist/godot-web/site_nothreads/` (for example `neon-style-7cc31`), then in Netlify set **Site configuration → Build & deploy → Production branch** to that same branch (or merge into `main` and deploy `main`).
+### 에디터로 실행
 
-Check local state:
+Godot 4.4+에서 [project.godot](project.godot)을 열고 **F5**를 누르면 `scenes/boot.tscn → title.tscn → game.tscn` 흐름으로 부팅됩니다.
 
-```bash
-bash "godot/tools/netlify_diagnose.sh"
-# Inspect .cursor/debug-2272c4.log for branch_push_state.unpushed_commits (should be 0 after push)
-```
-
-**Deploy without git push** (uploads from your machine): install the [Netlify CLI](https://docs.netlify.com/cli/get-started/), link the site once, then from the repo root:
+### 웹 빌드
 
 ```bash
-netlify deploy --prod --dir dist/godot-web/site_nothreads
+bash tools/build_web.sh
 ```
 
-### If `git push` fails (password prompt, **401**, or “Invalid username or token”)
-GitHub no longer accepts account passwords over HTTPS. Cursor/VS Code can inject **`GIT_ASKPASS`** into the **integrated** terminal (stack: **`askpass-main.js`**), which then returns no valid token and GitHub responds **401**.
+산출물:
 
-This repo’s **`.vscode/settings.json`** turns off **`git.terminalAuthentication`**, **`git.useIntegratedAskPass`**, **`git.githubAuthentication`** (VS Code–documented name), and **`github.gitAuthentication`** (GitHub extension) so the integrated terminal stops using the editor GitHub/askpass path that shows **`askpass-main.js`** in 401 traces. **Trust this workspace** if prompted. If you **cannot pull** yet, run `bash "godot/tools/print_workspace_git_settings.sh"` and merge the output into **User** settings JSON. **Reload the window**, run **Terminal: Kill All Terminals**, open **one new** terminal (old tabs can keep **`GIT_ASKPASS`**), run `bash godot/tools/dev_doctor.sh` to confirm **`GIT_ASKPASS`** is `<unset>`, then **`git push`**.
+- `build/godot-web/site_nothreads/` — 언팩된 웹 사이트 (godot.js + game.zip + index.html)
+- `build/godot-web/hitezero-godot-web-site_nothreads.zip` — 그대로 업로드 가능한 묶음
 
-Your clone may still use **`https://…@github.com/…`**; you need a stored PAT or helper. If 401 persists:
-
-Quick copy-paste for **SSH** (after your SSH key is on GitHub):
+로컬 서빙:
 
 ```bash
-bash "godot/tools/github_ssh_remote_hint.sh"
+python3 -m http.server 8123 --directory build/godot-web/site_nothreads
+# http://127.0.0.1:8123/index.html
 ```
 
-If push fails inside Cursor with **`askpass-main.js`** in the trace, run from **Terminal.app**:  
-`bash "godot/tools/git_push_interactive.sh" -u origin <branch>` — use your GitHub username and a **PAT** as the password when prompted.
+빌드 스크립트는 `godot --headless --export-pack "Web" game.zip`으로 pack을 만들고, Godot의 `web_nothreads_release.zip` 템플릿에 그 pack과 커스텀 `index.html`을 얹어서 no-threads 사이트를 조립합니다. 템플릿 경로가 자동 탐지되지 않으면 `GODOT_TEMPLATE_DIR` 환경변수로 지정하세요.
 
-**Push env log** (for debugging **401** / **`askpass-main.js`**): in the **same terminal** you use for push, run **`bash "godot/tools/log_push_env_to_debug_log.sh"`** immediately before **`git push`** (always writes **`.cursor/debug-2272c4.log`**). Optional: **`bash "godot/tools/enable_repo_hooks.sh"`** installs a **pre-push** hook that logs too — but Git may fail **before** that hook runs during credential errors, so prefer the explicit **`log_push_env_to_debug_log.sh`** line first.
+## 아키텍처 주요 파일
 
-1. **GitHub CLI** (simplest on macOS): `brew install gh && gh auth login`, then run `git push` from the same terminal (or configure Git to use `gh` as credential helper).
-2. **SSH**: add an SSH key to your GitHub account, run the hint script above (or `git remote set-url origin git@github.com:emptypizza/hitezero.git`), then `git push -u origin <branch>`.
-3. **HTTPS + PAT**: create a *personal access token* with `repo` scope and use it **as the password** when Git prompts, or use [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager). On macOS, if **`GIT_ASKPASS`** is already unset but you still get **401**, the Keychain may hold an old password: run `bash "godot/tools/erase_github_https_keychain.sh"` and push again with a **new PAT**.
+- [scripts/game_root.gd](scripts/game_root.gd) — 메인 컨트롤러(약 746줄). 입력, 나이프 스폰, 수동 circle-vs-AABB 충돌, 반사, `AIMING`/`SHOOTING`/`STAGE_CLEAR`/`GAME_OVER` 상태 머신.
+- [scripts/game_constants.gd](scripts/game_constants.gd) — 밸런스 상수, 블록 타입 enum, 팔레트.
+- [scripts/level_generator.gd](scripts/level_generator.gd) — 스테이지별 프로시저럴 그리드 생성.
+- [scripts/player.gd](scripts/player.gd), [scripts/knife.gd](scripts/knife.gd), [scripts/block.gd](scripts/block.gd) — 프로시저럴 렌더링 + 엔티티 개별 동작.
+- [scripts/hud.gd](scripts/hud.gd) — 하트, 점수, 오버레이. 비인터랙티브 컨트롤은 `MOUSE_FILTER_IGNORE`로 게임플레이 입력을 먹지 않음.
+- [scripts/session.gd](scripts/session.gd) — 오토로드. 세션 간 상태 보존.
 
-Until `git fetch` shows `origin/neon-style-7cc31` **past** commit `7a40cd5`, Netlify will not receive `netlify.toml` or `dist/godot-web/site_nothreads/`, and the site can keep showing Netlify’s “Page not found”.
+주의할 물리 룰:
+
+- 최소 Y 속도(약 18 px/s) 클램프로 얕은 수평 루프를 방지.
+- 파들-나이프 충돌은 **하강 중인 나이프에만** 적용 → 상승 중인 나이프를 다시 잡는 사고 방지.
+
+### JS 브릿지 (웹 빌드용)
+
+[scripts/game_root.gd](scripts/game_root.gd)에서 브라우저 자동화/검증용으로 노출:
+
+- `window.render_game_to_text()` — 현재 프레임의 텍스트 스냅샷
+- `window.advanceTime(ms)` — 시뮬레이션 고정 시간 진행
+- `window.__hitezero_state_json` — 블록/나이프/파들/모드 JSON 상태
+
+## 알려진 이슈
+
+- Godot 4.6의 `--export-release Web ...` 프리셋 구성 에러. 현재는 `--export-pack` 기반 경로가 안정적이며, 그 경로를 사용하는 `tools/build_web.sh`가 정식 빌드 수단입니다.
+- 수동 QA 남은 항목: 드래그 조준 정확도, 발사 중 파들 드래그, 모바일 터치 느낌.
+
+## 라이선스
+
+[LICENSE](LICENSE) 참조.
