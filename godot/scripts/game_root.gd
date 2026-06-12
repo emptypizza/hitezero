@@ -1359,7 +1359,8 @@ func _blast_aoe(center: Vector2, radius: float) -> void:
 			if block == null or block.is_destroyed():
 				continue
 			if block.global_position.distance_to(center) <= radius:
-				block.take_hit()
+				# Blast follows the run-scoped damage model, same as direct knife hits.
+				block.take_damage(_get_knife_damage())
 				_burst_feedback(block.global_position, Color(1.0, 0.35, 0.15, 0.7), 10.0, 0.14)
 				hit_any = true
 				if block.is_destroyed():
@@ -1979,9 +1980,11 @@ func _update_group_kill(delta: float) -> void:
 	# Window closed — judge the burst once, then reset.
 	if _burst_destroy_count >= GameConstants.GROUP_KILL_MIN:
 		group_dmg_bonus += GameConstants.GROUP_KILL_DMG_BONUS
-		hud.show_toast("GROUP KILL! ATK +%d" % group_dmg_bonus, GameConstants.GLOW_REWARD)
+		# Toast shows the increment, not the running total ("ATK +1" per stack).
+		hud.show_toast("GROUP KILL! ATK +%d" % GameConstants.GROUP_KILL_DMG_BONUS, GameConstants.GLOW_REWARD)
 		AudioManager.play("block_destroy_star", 1.25)
 		_camera_punch(0.015)
+		_emit_ui_update()
 	_burst_destroy_count = 0
 
 

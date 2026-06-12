@@ -83,6 +83,22 @@ func _run() -> void:
 	game.run_buffs.clear()
 	game.run_damage_bonus = 0
 
+	# ── Blast AoE follows the run damage model (G3.1) ───────────────────────
+	game.run_damage_bonus = 2  # knife damage becomes 3
+	var blast_block: Block = null
+	for child in game.blocks_layer.get_children():
+		var b := child as Block
+		if b != null and not b.is_destroyed():
+			blast_block = b
+			break
+	_check(blast_block != null, "stage has a live block for the blast check")
+	if blast_block != null:
+		blast_block.hp = 10
+		game._blast_aoe(blast_block.global_position, 1.0)
+		_check(blast_block.hp == 10 - game._get_knife_damage(),
+			"blast applies run-modified knife damage (hp 10 -> %d)" % blast_block.hp)
+	game.run_damage_bonus = 0
+
 	# ── Level-up open / instant resume (G3.1) ───────────────────────────────
 	game._open_levelup()
 	_check(game.levelup_open, "level-up flag set on open")
@@ -110,6 +126,9 @@ func _run() -> void:
 	game._update_group_kill(GameConstants.GROUP_KILL_WINDOW + 0.1)
 	_check(game.group_dmg_bonus == GameConstants.GROUP_KILL_DMG_BONUS,
 		"sub-threshold burst does not award a stack")
+	# The award must emit ui_updated so the ATK chip refreshes immediately.
+	_check(hud._prev_group_bonus == game.group_dmg_bonus,
+		"group-kill award reaches the HUD chip on the same tick")
 
 	# ── Ambience (G1.4) ─────────────────────────────────────────────────────
 	for i in range(40):
