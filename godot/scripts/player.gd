@@ -27,7 +27,9 @@ const BASE_BODY_POSITION := Vector2(0.0, -33.0)
 const BASE_TRAY_POSITION := Vector2(0.0, -78.0)
 const MAID_TARGET_HEIGHT := 124.0
 const OUTPUT_DURATION := 0.52
-const OUTPUT_FLASH_TIME := 0.26
+# Hot-flash window follows the duck-flock reference spec (GameConstants.FLASH_LIFE):
+# muzzle glow lives 1–2 frames, the blade trail/particles carry the follow-through.
+const OUTPUT_FLASH_TIME := 0.13
 const OUTPUT_PARTICLE_COUNT := 18
 
 @onready var tray: Sprite2D = $Tray

@@ -34,6 +34,32 @@ Original prompt: Implement the plan as specified, it is attached for your refere
 - The local verification server is expected at `http://127.0.0.1:8123/index.html` when serving `build/godot-web/site_nothreads/`.
 - The latest distributable build now also lives under `dist/`, not just `build/`.
 
+## Duckflock reference DNA (2026-06-12)
+- Analyzed the duck-flock reference video frame-by-frame; analysis + goal plan in
+  `godot/docs/duckflock_reference_goal_plan.md`, curated frames in `reference_frames/duckflock_*.jpg`.
+- Implemented the goal plan across `game_constants.gd` (timing/palette tokens), `hud.gd`,
+  `game_root.gd`, `block.gd` (take_damage), `player.gd` (0.13s hot flash):
+  - Kill chain: every destroy spawns 4-6 gold coin shards → scatter → magnet to paddle →
+    rising-pitch tick + score punch.
+  - Toast system: top-right white rounded cards (slide-in 0.22s, hold 2.2s, stack of 3) for
+    combo tiers, group kills, item pickups, boss downs, level-up picks.
+  - Objective pill: top-centre `★ n/m` gold pill with flip animation on collect.
+  - x2 speed + SND mute pill buttons (bottom centre); game_speed scales sim delta only, so
+    hit-stop/shake/flash stay real-time at x2.
+  - In-run level-up: 3-card pick after every stage clear / boss defeat (run-scoped DAMAGE+1 /
+    KNIFE+1 / SPEED+10% / TRAY+12 + timed 2xDMG 18s / PIERCE 12s); pick resumes play same frame.
+  - Group kill: ≥5 destroys inside a 0.5s chain window grant a permanent run ATK stack
+    (settled on stage clear too) with toast + HUD chip.
+  - Ambience: radial vignette layer + rising cyan/pink firefly motes.
+- New headless integration test: `godot/tools/test_duckflock_systems.gd` (26 checks) — run via
+  `godot --headless --path godot -s tools/test_duckflock_systems.gd`.
+- Verified: headless game scene 240 frames clean; all python tools tests pass
+  (`test_player_output_vfx.py` updated to the new 0.13s flash spec); web build + browser QA
+  full loop (start → x2 → volley → coin chain → level-up pick resumes in ~1-2 frames →
+  stages 2/3, PIERCE buff timer HUD) with zero console errors.
+
 ## Remaining TODOs
 - Run manual browser QA for drag aiming, paddle dragging during shooting, and mobile touch feel.
 - Compare runtime feel against `godot/docs/gameplay_spec.md`.
+- Duckflock plan phase 4 (optional style deepening): wet-ground fake reflection, rounded block
+  corners, cyan bubble-pop VFX for elite/boss kills.

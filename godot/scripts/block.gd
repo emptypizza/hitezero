@@ -88,7 +88,11 @@ func advance_enemy(delta: float) -> void:
 
 
 func take_hit(impact_dir: Vector2 = Vector2.ZERO) -> int:
-	hp = maxi(0, hp - 1)
+	return take_damage(1, impact_dir)
+
+
+func take_damage(amount: int, impact_dir: Vector2 = Vector2.ZERO) -> int:
+	hp = maxi(0, hp - maxi(1, amount))
 	flash_amount = 1.0
 	# Kick off a directional squash & stretch. Blocks aren't rotated, so the
 	# local impact direction equals the world direction we're handed.
