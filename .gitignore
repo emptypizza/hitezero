@@ -37,3 +37,6 @@ dist/netlify-hitezero-*.zip
 # Stray local artifacts (deploy bundles / temp downloads) — not part of the project
 /hitezero-netlify.zip
 /ziYnjCRT
+
+# Generated Android gradle build template (regenerated from android_source.zip)
+godot/android/
