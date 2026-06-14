@@ -10,7 +10,7 @@ name: Android (AAB + APK)
 #
 # REQUIRED REPO SECRETS  (Settings -> Secrets and variables -> Actions)
 #   ANDROID_KEYSTORE_BASE64    base64 of your upload keystore (.jks)
-#                              make it:  base64 -w0 new_upload_key.jks  > key.b64
+#                              make it:  base64 -w0 hitezero_upload.jks  > key.b64
 #   ANDROID_KEY_ALIAS          the key alias (keytool -list -v -keystore *.jks)
 #   ANDROID_KEYSTORE_PASSWORD  the keystore password (assumes key pw == store pw)
 #
