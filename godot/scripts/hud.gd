@@ -11,6 +11,7 @@ signal title_requested
 signal collider_debug_toggled(enabled: bool)
 signal speed_toggled(fast: bool)
 signal levelup_chosen(option_key: String)
+signal pause_toggled  # NEW-01: pause pill pressed (game_root owns the state)
 
 var hearts_row: HBoxContainer
 var knife_count_label: Label
@@ -42,6 +43,10 @@ var pill_panel: PanelContainer       # top-centre objective pill: ★ n/m
 var pill_label: Label
 var speed_button: Button             # ⏩ x2 toggle (bottom centre)
 var mute_button: Button
+var pause_button: Button             # NEW-01: ❚❚ pause pill (bottom centre)
+var pause_root: Control              # NEW-01: dim + "PAUSED" overlay
+var pause_title_label: Label
+var pause_hint_label: Label
 var group_chip_label: Label          # "ATK +n" group-kill stack chip
 var buff_label: Label                # timed run-buff readout (2xDMG 12s …)
 var levelup_root: Control
@@ -546,6 +551,19 @@ func _build_ui() -> void:
 	mute_button.pressed.connect(_on_mute_button_pressed)
 	root.add_child(mute_button)
 
+	# NEW-02: restore the persisted mute state before the first sound plays.
+	muted = Session.sound_muted
+	if muted:
+		mute_button.text = "OFF"
+		_style_pill_button(mute_button, true)
+		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+
+	# NEW-01: pause pill, left of the x2 toggle.
+	pause_button = _make_pill_button("II", Vector2(GameConstants.CANVAS_WIDTH * 0.5 - 112.0, GameConstants.CANVAS_HEIGHT - 34.0))
+	pause_button.pressed.connect(_on_pause_button_pressed)
+	root.add_child(pause_button)
+	_build_pause_overlay(root)
+
 	# ─── Level-up 3-card overlay (reference レベルアップ!! popup) ───────────
 	_build_levelup_ui(root)
 
@@ -933,8 +951,60 @@ func _on_mute_button_pressed() -> void:
 	mute_button.text = "OFF" if muted else "SND"
 	_style_pill_button(mute_button, muted)
 	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), muted)
+	Session.set_sound_muted(muted)  # NEW-02: persist across sessions
 	if not muted:
 		AudioManager.play("ui_click")
+
+
+# ─── NEW-01: pause pill + overlay ────────────────────────────────────────────
+
+func _on_pause_button_pressed() -> void:
+	AudioManager.play("ui_click")
+	pause_toggled.emit()
+
+
+func _build_pause_overlay(root: Control) -> void:
+	# Visual-only: every layer ignores the mouse so the resume tap falls
+	# through to game_root._unhandled_input (which also guards aiming).
+	pause_root = Control.new()
+	pause_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_root.visible = false
+	root.add_child(pause_root)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.02, 0.03, 0.06, 0.62)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_root.add_child(dim)
+
+	pause_title_label = Label.new()
+	pause_title_label.text = "PAUSED"
+	pause_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_title_label.position = Vector2(0.0, GameConstants.CANVAS_HEIGHT * 0.42)
+	pause_title_label.size = Vector2(GameConstants.CANVAS_WIDTH, 30.0)
+	pause_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_title_label.modulate = Color(0.86, 0.95, 1.0, 1.0)
+	_apply_font(pause_title_label, 22)
+	pause_root.add_child(pause_title_label)
+
+	pause_hint_label = Label.new()
+	pause_hint_label.text = "TAP TO RESUME"
+	pause_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_hint_label.position = Vector2(0.0, GameConstants.CANVAS_HEIGHT * 0.42 + 42.0)
+	pause_hint_label.size = Vector2(GameConstants.CANVAS_WIDTH, 16.0)
+	pause_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_hint_label.modulate = Color(0.62, 0.74, 0.86, 0.9)
+	_apply_font(pause_hint_label, 9)
+	pause_root.add_child(pause_hint_label)
+
+
+func set_paused(paused: bool) -> void:
+	if pause_root != null:
+		pause_root.visible = paused
+	if pause_button != null:
+		pause_button.text = ">" if paused else "II"
+		_style_pill_button(pause_button, paused)
 
 
 # ─── Level-up 3-card overlay ─────────────────────────────────────────────────

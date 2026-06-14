@@ -17,6 +17,8 @@ var upgrade_item_slot: int = 0   # +1 item slot (max 1)
 var upgrade_pow: int = 0         # +2 POW mini-knives per level (max 2)
 var upgrade_drop: int = 0        # +3% item drop per level (max 3)
 
+var sound_muted: bool = false    # NEW-02: persisted HUD mute pill state
+
 # ─── Stats ─────────────────────────────────────────────────────────────────
 var total_runs: int = 0
 var total_blocks_destroyed: int = 0
@@ -94,6 +96,8 @@ func load_progress() -> void:
 		best_combo = int(config.get_value("stats", "best_combo", 0))
 		total_items_collected = int(config.get_value("stats", "total_items_collected", 0))
 
+		sound_muted = bool(config.get_value("settings", "sound_muted", false))
+
 
 func save_progress() -> void:
 	var config := ConfigFile.new()
@@ -117,15 +121,19 @@ func save_progress() -> void:
 	config.set_value("stats", "best_combo", best_combo)
 	config.set_value("stats", "total_items_collected", total_items_collected)
 
+	config.set_value("settings", "sound_muted", sound_muted)
+
 	config.save(SAVE_PATH)
 	_save_dirty = false
 	_save_timer = 0.0
 
 
-func submit_score(score: int) -> void:
-	if score > best_score:
-		best_score = score
-	save_progress()
+# NEW-02: the HUD mute pill persists across sessions.
+func set_sound_muted(muted: bool) -> void:
+	if sound_muted == muted:
+		return
+	sound_muted = muted
+	_mark_dirty()
 
 
 func submit_run(score: int, stage: int, combo_max: int) -> void:

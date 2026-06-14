@@ -7,6 +7,17 @@ const TEX_RED_ENEMY: Texture2D = preload("res://assets/textures/blocks/E1.webp")
 const TEX_STAR_BLOCK: Texture2D = preload("res://assets/textures/blocks/S1.webp")
 const TEX_POW_BLOCK: Texture2D = preload("res://assets/textures/blocks/P1.webp")
 const TEX_STAR_OVERLAY: Texture2D = preload("res://assets/textures/ui/star.png")
+const ROUNDED_BLOCK_SHADER: Shader = preload("res://assets/shaders/rounded_block.gdshader")
+const ENEMY_CEL_SHADER: Shader = preload("res://assets/shaders/enemy_cel.gdshader")
+
+# VX-02: one shared material for every rounded block sprite. The shader only
+# reads uniform defaults, so all instances can point at the same resource.
+static var _rounded_material: ShaderMaterial = null
+
+# CEL-03: one shared blob-safe cel material for every RED_ENEMY sprite. This is
+# NOT the rounded-card mask — it keys off the sprite's own alpha so the organic
+# silhouette is preserved (see test_red_enemy_sprite / test_levelgen_vx).
+static var _enemy_material: ShaderMaterial = null
 
 @onready var block_sprite: Sprite2D = $BlockSprite
 @onready var overlay_star: Sprite2D = $OverlayStar
@@ -169,6 +180,20 @@ func _ensure_label() -> void:
 		label = get_node_or_null("Label") as Label
 
 
+static func _get_rounded_material() -> ShaderMaterial:
+	if _rounded_material == null:
+		_rounded_material = ShaderMaterial.new()
+		_rounded_material.shader = ROUNDED_BLOCK_SHADER
+	return _rounded_material
+
+
+static func _get_enemy_material() -> ShaderMaterial:
+	if _enemy_material == null:
+		_enemy_material = ShaderMaterial.new()
+		_enemy_material.shader = ENEMY_CEL_SHADER
+	return _enemy_material
+
+
 func _apply_block_visual() -> void:
 	if block_sprite == null:
 		return
@@ -176,15 +201,22 @@ func _apply_block_visual() -> void:
 		GameConstants.BLOCK_RED_ENEMY:
 			block_sprite.texture = TEX_RED_ENEMY
 			_base_modulate = Color.WHITE
+			# Blob must keep its organic silhouette — never the rounded corner
+			# mask. CEL-03 instead gives it an alpha-keyed, red-first cel shader
+			# (bands MULTIPLY the sprite, so the silhouette is untouched).
+			block_sprite.material = _get_enemy_material()
 		GameConstants.BLOCK_STAR:
 			block_sprite.texture = TEX_STAR_BLOCK
 			_base_modulate = Color.WHITE
+			block_sprite.material = _get_rounded_material()
 		GameConstants.BLOCK_POW:
 			block_sprite.texture = TEX_POW_BLOCK
 			_base_modulate = Color.WHITE
+			block_sprite.material = _get_rounded_material()
 		_:
 			block_sprite.texture = TEX_BRICK
 			_base_modulate = Color.WHITE
+			block_sprite.material = _get_rounded_material()
 	_update_sprite_modulate()
 	_update_sprite_scale()
 	queue_redraw()

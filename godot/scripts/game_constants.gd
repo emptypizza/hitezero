@@ -178,3 +178,22 @@ const LEVELUP_OPTIONS: Array = [
 # Applied to the simulation delta only — hit-stop, shake, flash and HUD tweens
 # stay on real time so impacts keep their weight at double speed.
 const GAME_SPEED_FAST := 2.0
+
+# ─── CEL 2.5D pass (subculture cel-slab look, 2026-06-13) ───────────────────
+# Single source of truth for the fake-3D depth pass: blocks read as thick
+# cel-shaded tiles extruded toward a canvas-centre vanishing point, grounded
+# by a key-light drop shadow. Draw-only — AABBs and sim state never change.
+const CEL_INK := Color(0.13, 0.09, 0.22, 1.0)          # manga ink outline tone
+const CEL_SHADOW_COLOR := Color(0.08, 0.05, 0.18, 1.0) # purple-ink drop shadow
+const CEL_SHADOW_ALPHA := 0.32
+const CEL_SLAB_THICKNESS := 7.0     # px of fake depth below each card
+const CEL_SLAB_PERSPECTIVE := 0.045 # horizontal extrusion per px from centre
+const CEL_SLAB_MAX_SIDE := 7.0      # clamp so edge columns stay tidy
+# Side-face base tints per card type (bottom face uses the same tint darker).
+# RED_ENEMY is intentionally absent: the blob keeps its organic silhouette and
+# only receives a soft contact shadow, never a slab.
+const CEL_SIDE_COLORS: Dictionary = {
+	BLOCK_NORMAL: Color(0.34, 0.19, 0.13, 1.0),
+	BLOCK_STAR: Color(0.58, 0.54, 0.68, 1.0),
+	BLOCK_POW: Color(0.11, 0.09, 0.16, 1.0),
+}

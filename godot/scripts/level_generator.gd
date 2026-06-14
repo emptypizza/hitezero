@@ -57,6 +57,28 @@ const PATTERNS_DENSE: Array = [
 	["XSXXXXX", "XXXXXEX", "XXPXXXX", "EXXXSXX", "XXXXXXX"],
 	# Stacked walls (5 rows)
 	["NNNNNNN", "ENNNNEN", "NNPSPNN", "ENNNNEN", "NNNNNNN"],
+	# Serpent corridor (6 rows) — LD-01
+	["NNNNNN.", ".....NN", "NSNNNNN", "NN.....", ".NNNNEN", "....NPN"],
+	# Twin pillars (5 rows) — LD-01
+	["N.NSN.N", "N.NNN.N", "E.NNN.E", "N.NPN.N", "N.NSN.N"],
+	# Arena (6 rows) — LD-01
+	["NNNNNNN", "N.....N", "N.ESE.N", "N..P..N", "N.....N", "NNNSNNN"],
+]
+
+# LD-01: late-run pool (lv 20+). Heavier on E threats and X wildcards so the
+# end-game keeps producing layouts the DENSE pool can't — without touching the
+# HP curve (difficulty still comes from _base_hp).
+const PATTERNS_BRUTAL: Array = [
+	# Gauntlet (5 rows)
+	["XEXXXEX", "XXXSXXX", "EXXXXXE", "XXPXPXX", "XXXSXXX"],
+	# Twin keeps (5 rows)
+	["NNN.NNN", "NSN.NSN", "NEN.NEN", "NNN.NNN", "..NPN.."],
+	# Avalanche (6 rows)
+	["NNNN...", "NNNNN..", "ENNSNNE", "..NNNNN", "...NNNN", "XXPXSXX"],
+	# Hive (5 rows)
+	["X.XXX.X", "XENSNEX", "XXXXXXX", "XENPNEX", "X.XSX.X"],
+	# Crown (5 rows)
+	["N.N.N.N", "NNNNNNN", "NESNSEN", "NNNNNNN", ".NNPNN."],
 ]
 
 
@@ -104,6 +126,12 @@ static func init_level(game_root, level: int) -> void:
 
 # ─── Pattern selection ────────────────────────────────────────────────────────
 
+# LD-01: remembers the previous pick so two consecutive stages never share a
+# layout. Static, so it survives across init_level calls within a run; a stale
+# value from a previous run only skips one candidate, which is harmless.
+static var _last_pattern: Array = []
+
+
 static func _pick_pattern(level: int, rng: RandomNumberGenerator) -> Array:
 	var pool: Array
 	if level <= 3:
@@ -112,9 +140,24 @@ static func _pick_pattern(level: int, rng: RandomNumberGenerator) -> Array:
 		pool = PATTERNS_MEDIUM
 	elif level <= 12:
 		pool = PATTERNS_COMPLEX
-	else:
+	elif level <= 19:
 		pool = PATTERNS_DENSE if rng.randf() > 0.3 else PATTERNS_COMPLEX
-	return pool[rng.randi() % pool.size()]
+	else:
+		# Late run: BRUTAL leads, DENSE backs it up, COMPLEX as a breather.
+		var r := rng.randf()
+		if r < 0.5:
+			pool = PATTERNS_BRUTAL
+		elif r < 0.85:
+			pool = PATTERNS_DENSE
+		else:
+			pool = PATTERNS_COMPLEX
+
+	var idx := rng.randi() % pool.size()
+	if pool.size() > 1 and pool[idx] == _last_pattern:
+		# Re-roll among the remaining patterns — guaranteed different.
+		idx = (idx + 1 + rng.randi() % (pool.size() - 1)) % pool.size()
+	_last_pattern = pool[idx]
+	return pool[idx]
 
 
 # ─── Pattern → block list ─────────────────────────────────────────────────────

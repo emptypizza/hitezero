@@ -27,10 +27,10 @@ Haptics="*res://scripts/haptics.gd"
 
 [display]
 
-window/handheld/orientation=1
 window/size/viewport_width=400
 window/size/viewport_height=700
 window/stretch/mode="viewport"
+window/handheld/orientation=1
 
 [dotnet]
 
