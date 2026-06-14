@@ -9,10 +9,12 @@ const ICON_STAR: Texture2D = preload("res://assets/textures/ui/star.png")
 
 signal title_requested
 signal collider_debug_toggled(enabled: bool)
+signal speed_toggled(fast: bool)
+signal levelup_chosen(option_key: String)
+signal pause_toggled  # NEW-01: pause pill pressed (game_root owns the state)
 
 var hearts_row: HBoxContainer
 var knife_count_label: Label
-var stars_label: Label
 var overlay_root: Control
 var overlay_bg: ColorRect
 var overlay_panel: PanelContainer
@@ -36,14 +38,41 @@ var boss_phase_label: Label
 var score_label: Label
 var level_label: Label
 
+# ─── Reference-DNA UI (duckflock goal plan) ────────────────────────────────
+var pill_panel: PanelContainer       # top-centre objective pill: ★ n/m
+var pill_label: Label
+var speed_button: Button             # ⏩ x2 toggle (bottom centre)
+var mute_button: Button
+var pause_button: Button             # NEW-01: ❚❚ pause pill (bottom centre)
+var pause_root: Control              # NEW-01: dim + "PAUSED" overlay
+var pause_title_label: Label
+var pause_hint_label: Label
+var group_chip_label: Label          # "ATK +n" group-kill stack chip
+var buff_label: Label                # timed run-buff readout (2xDMG 12s …)
+var levelup_root: Control
+var levelup_cards_box: VBoxContainer
+var levelup_banner: PanelContainer
+var _toast_root: Control
+var _toasts: Array[PanelContainer] = []
+var speed_fast: bool = false
+var muted: bool = false
+
+const _TOAST_WIDTH := 158.0
+const _TOAST_HEIGHT := 26.0
+const _TOAST_GAP := 6.0
+const _TOAST_BASE_Y := GameConstants.TOP_BAR_HEIGHT + 34.0
+const _TOAST_MAX := 3
+
 const _PANEL_POS := Vector2(40.0, 215.0)
 
 var _prev_hearts: int = -1
 var _prev_knife_count: int = -1
 var _prev_stars_left: int = -1
+var _prev_stars_collected: int = -1
 var _prev_combo: int = -1
 var _prev_score: int = -1
 var _prev_level: int = -1
+var _prev_group_bonus: int = 0
 
 
 func _ready() -> void:
@@ -55,36 +84,45 @@ func update_ui(data: Dictionary) -> void:
 	var new_hearts := clampi(int(data.get("hearts", 0)), 0, Session.get_max_hearts())
 	var new_knife_count := int(data.get("knife_count", 0))
 	var new_stars_left := int(data.get("stars_left", 0))
+	var new_stars_total := int(data.get("stars_total", new_stars_left))
+	var new_stars_collected := clampi(new_stars_total - new_stars_left, 0, new_stars_total)
 	var new_combo := int(data.get("combo", 0))
 	var combo_timer_val := float(data.get("combo_timer", 0.0))
 	var new_score := int(data.get("score", 0))
 	var new_level := int(data.get("level", 1))
+	var group_bonus := int(data.get("group_dmg_bonus", 0))
 
 	if _prev_hearts >= 0:
 		if new_hearts < _prev_hearts:
 			_heart_flash()
 		if new_knife_count != _prev_knife_count:
 			_punch_scale(knife_count_label)
-		if new_stars_left != _prev_stars_left:
-			_punch_scale(stars_label)
+		if new_stars_collected > _prev_stars_collected:
+			_pill_flip()
 		if new_combo > _prev_combo and new_combo >= 3:
 			_punch_scale(combo_label)
 		if new_score > _prev_score and _prev_score >= 0:
 			_punch_scale(score_label)
+		if group_bonus > _prev_group_bonus:
+			_punch_scale(group_chip_label)
 
 	_prev_hearts = new_hearts
 	_prev_knife_count = new_knife_count
 	_prev_stars_left = new_stars_left
+	_prev_stars_collected = new_stars_collected
 	_prev_combo = new_combo
 	_prev_score = new_score
 	_prev_level = new_level
+	_prev_group_bonus = group_bonus
 
 	_refresh_hearts(new_hearts)
 	knife_count_label.text = "%02d" % new_knife_count
-	stars_label.text = "%d" % new_stars_left
+	_refresh_pill(new_stars_collected, new_stars_total)
 	_refresh_score(new_score, new_level)
 	_refresh_combo(new_combo, combo_timer_val)
 	_refresh_items(data.get("item_slots", []), data.get("item_timers", []))
+	_refresh_group_chip(group_bonus)
+	_refresh_run_buffs(data.get("run_buffs", {}))
 
 
 func show_stage_clear(next_level: int, heart_bonus: int) -> void:
@@ -155,6 +193,12 @@ func hide_overlay() -> void:
 	overlay_retry.text = ""
 	overlay_retry.modulate.a = 0.0
 	hide_boss_ui()
+	hide_levelup()
+
+
+func punch_score() -> void:
+	# Public hook: coin shards punch the score label as they bank.
+	_punch_scale(score_label)
 
 
 func set_collider_debug(enabled: bool) -> void:
@@ -209,7 +253,7 @@ func _build_ui() -> void:
 	root.add_child(hearts_row)
 
 	var knife_icon := TextureRect.new()
-	knife_icon.position = Vector2(118.0, 11.0)
+	knife_icon.position = Vector2(96.0, 11.0)
 	knife_icon.size = Vector2(20.0, 20.0)
 	knife_icon.texture = ICON_KNIFE
 	knife_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -219,35 +263,54 @@ func _build_ui() -> void:
 	root.add_child(knife_icon)
 
 	knife_count_label = Label.new()
-	knife_count_label.position = Vector2(142.0, 12.0)
-	knife_count_label.size = Vector2(56.0, 22.0)
-	knife_count_label.pivot_offset = Vector2(28.0, 11.0)
+	knife_count_label.position = Vector2(120.0, 12.0)
+	knife_count_label.size = Vector2(40.0, 22.0)
+	knife_count_label.pivot_offset = Vector2(20.0, 11.0)
 	knife_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	knife_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	knife_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_apply_font(knife_count_label, 10)
 	root.add_child(knife_count_label)
 
-	var star_icon := TextureRect.new()
-	star_icon.position = Vector2(218.0, 11.0)
-	star_icon.size = Vector2(20.0, 20.0)
-	star_icon.texture = ICON_STAR
-	star_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	star_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	star_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	star_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(star_icon)
+	# Objective pill (reference: top-centre skull 0/1) — star progress n/m.
+	pill_panel = PanelContainer.new()
+	pill_panel.position = Vector2(GameConstants.CANVAS_WIDTH * 0.5 - 41.0, 9.0)
+	pill_panel.custom_minimum_size = Vector2(82.0, 30.0)
+	pill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pill_style := StyleBoxFlat.new()
+	pill_style.bg_color = Color(0.05, 0.06, 0.10, 0.96)
+	pill_style.set_border_width_all(1)
+	pill_style.border_color = Color(GameConstants.GLOW_REWARD.r, GameConstants.GLOW_REWARD.g, GameConstants.GLOW_REWARD.b, 0.65)
+	pill_style.set_corner_radius_all(15)
+	pill_style.content_margin_left = 10.0
+	pill_style.content_margin_right = 10.0
+	pill_style.content_margin_top = 4.0
+	pill_style.content_margin_bottom = 4.0
+	pill_panel.add_theme_stylebox_override("panel", pill_style)
+	root.add_child(pill_panel)
 
-	stars_label = Label.new()
-	stars_label.position = Vector2(242.0, 12.0)
-	stars_label.size = Vector2(44.0, 22.0)
-	stars_label.pivot_offset = Vector2(22.0, 11.0)
-	stars_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	stars_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stars_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
-	stars_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_apply_font(stars_label, 10)
-	root.add_child(stars_label)
+	var pill_box := HBoxContainer.new()
+	pill_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	pill_box.add_theme_constant_override("separation", 5)
+	pill_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill_panel.add_child(pill_box)
+
+	var pill_star := TextureRect.new()
+	pill_star.custom_minimum_size = Vector2(16.0, 16.0)
+	pill_star.texture = ICON_STAR
+	pill_star.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pill_star.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pill_star.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pill_star.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill_box.add_child(pill_star)
+
+	pill_label = Label.new()
+	pill_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pill_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
+	pill_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill_label.text = "0/0"
+	_apply_font(pill_label, 10)
+	pill_box.add_child(pill_label)
 
 	# ─── Score & Level (top-bar right) ────────────────────────────────────
 	level_label = Label.new()
@@ -457,12 +520,66 @@ func _build_ui() -> void:
 	_apply_font(overlay_retry, 8)
 	vbox.add_child(overlay_retry)
 
+	# ─── Group-kill stack chip (top-left, under top bar) ──────────────────
+	group_chip_label = Label.new()
+	group_chip_label.position = Vector2(10.0, GameConstants.TOP_BAR_HEIGHT + 6.0)
+	group_chip_label.size = Vector2(130.0, 14.0)
+	group_chip_label.pivot_offset = Vector2(20.0, 7.0)
+	group_chip_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
+	group_chip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group_chip_label.visible = false
+	_apply_font(group_chip_label, 7)
+	root.add_child(group_chip_label)
+
+	# ─── Timed run-buff readout (above item slots) ─────────────────────────
+	buff_label = Label.new()
+	buff_label.position = Vector2(GameConstants.CANVAS_WIDTH - 170.0, GameConstants.CANVAS_HEIGHT - 62.0)
+	buff_label.size = Vector2(160.0, 14.0)
+	buff_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	buff_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
+	buff_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	buff_label.visible = false
+	_apply_font(buff_label, 7)
+	root.add_child(buff_label)
+
+	# ─── In-game speed + mute buttons (reference ⏩ x2 / 🔇, bottom centre) ─
+	speed_button = _make_pill_button("x2", Vector2(GameConstants.CANVAS_WIDTH * 0.5 - 52.0, GameConstants.CANVAS_HEIGHT - 34.0))
+	speed_button.pressed.connect(_on_speed_button_pressed)
+	root.add_child(speed_button)
+
+	mute_button = _make_pill_button("SND", Vector2(GameConstants.CANVAS_WIDTH * 0.5 + 8.0, GameConstants.CANVAS_HEIGHT - 34.0))
+	mute_button.pressed.connect(_on_mute_button_pressed)
+	root.add_child(mute_button)
+
+	# NEW-02: restore the persisted mute state before the first sound plays.
+	muted = Session.sound_muted
+	if muted:
+		mute_button.text = "OFF"
+		_style_pill_button(mute_button, true)
+		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+
+	# NEW-01: pause pill, left of the x2 toggle.
+	pause_button = _make_pill_button("II", Vector2(GameConstants.CANVAS_WIDTH * 0.5 - 112.0, GameConstants.CANVAS_HEIGHT - 34.0))
+	pause_button.pressed.connect(_on_pause_button_pressed)
+	root.add_child(pause_button)
+	_build_pause_overlay(root)
+
+	# ─── Level-up 3-card overlay (reference レベルアップ!! popup) ───────────
+	_build_levelup_ui(root)
+
+	# ─── Toast root (top-right sliding cards) — last so toasts draw on top ─
+	_toast_root = Control.new()
+	_toast_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_toast_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_toast_root)
+
 	update_ui({
 		"hearts": Session.get_max_hearts(),
 		"knife_count": Session.get_starting_knives(),
 		"stars_left": 0,
 	})
 	hide_overlay()
+	hide_levelup()
 
 
 func _refresh_score(new_score: int, new_level: int) -> void:
@@ -641,3 +758,387 @@ func _heart_flash() -> void:
 	var t := create_tween()
 	t.tween_property(hearts_row, "modulate", Color(1.0, 0.22, 0.22, 1.0), 0.05)
 	t.tween_property(hearts_row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.18)
+
+
+# ─── Objective pill ──────────────────────────────────────────────────────────
+
+func _refresh_pill(collected: int, total: int) -> void:
+	if pill_label == null:
+		return
+	pill_label.text = "%d/%d" % [collected, total]
+	# Full set reads as "done": pill text flips to the reward green.
+	if total > 0 and collected >= total:
+		pill_label.modulate = Color(0.35, 1.0, 0.55, 1.0)
+	else:
+		pill_label.modulate = Color(0.98, 0.82, 0.26, 1.0)
+
+
+func _pill_flip() -> void:
+	# Counter-flip on collect (reference: skull pill flips 0/1 → 1/1 within a frame).
+	if pill_panel == null:
+		return
+	pill_panel.pivot_offset = pill_panel.size * 0.5
+	pill_panel.scale = Vector2.ONE
+	var t := create_tween()
+	t.tween_property(pill_panel, "scale:y", 0.15, 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	t.tween_property(pill_panel, "scale:y", 1.0, 0.10).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var glow := create_tween()
+	glow.tween_property(pill_panel, "modulate", Color(1.6, 1.5, 1.0, 1.0), 0.05)
+	glow.tween_property(pill_panel, "modulate", Color.WHITE, 0.22)
+
+
+# ─── Group-kill chip + timed run buffs ───────────────────────────────────────
+
+func _refresh_group_chip(bonus: int) -> void:
+	if group_chip_label == null:
+		return
+	group_chip_label.visible = bonus > 0
+	if bonus > 0:
+		group_chip_label.text = "ATK +%d" % bonus
+
+
+func _refresh_run_buffs(buffs: Dictionary) -> void:
+	if buff_label == null:
+		return
+	if buffs.is_empty():
+		buff_label.visible = false
+		return
+	var parts: Array[String] = []
+	for key in buffs.keys():
+		var remaining := ceili(float(buffs[key]))
+		match key:
+			GameConstants.RUN_BUFF_DOUBLE_DAMAGE:
+				parts.append("2xDMG %ds" % remaining)
+			GameConstants.RUN_BUFF_PIERCE:
+				parts.append("PIERCE %ds" % remaining)
+			_:
+				parts.append("%s %ds" % [str(key), remaining])
+	buff_label.text = "  ".join(parts)
+	buff_label.visible = true
+
+
+# ─── Toast system (reference: top-right "Group Kill / Attack +90" card) ──────
+
+func show_toast(text: String, accent: Color = GameConstants.GLOW_REWARD) -> void:
+	if _toast_root == null:
+		return
+	# Cap the stack: drop the oldest immediately so new info always lands.
+	while _toasts.size() >= _TOAST_MAX:
+		_dismiss_toast(_toasts[_toasts.size() - 1], true)
+
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(_TOAST_WIDTH, _TOAST_HEIGHT)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = GameConstants.UI_CARD_BG
+	style.set_corner_radius_all(13)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
+	style.shadow_size = 4
+	style.content_margin_left = 8.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	card.add_theme_stylebox_override("panel", style)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(row)
+
+	var accent_bar := ColorRect.new()
+	accent_bar.custom_minimum_size = Vector2(4.0, 14.0)
+	accent_bar.color = accent
+	accent_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(accent_bar)
+
+	var label := Label.new()
+	label.text = text
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_color_override("font_color", GameConstants.UI_CARD_TEXT)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(label, 7)
+	row.add_child(label)
+
+	_toast_root.add_child(card)
+	_toasts.insert(0, card)
+
+	# Slide in from the right edge inside TOAST_IN_TIME (AC ≤ 270 ms).
+	card.position = Vector2(GameConstants.CANVAS_WIDTH + 8.0, _TOAST_BASE_Y)
+	card.modulate.a = 0.0
+	var target_x := GameConstants.CANVAS_WIDTH - _TOAST_WIDTH - 8.0
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(card, "position:x", target_x, GameConstants.TOAST_IN_TIME) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(card, "modulate:a", 1.0, GameConstants.TOAST_IN_TIME * 0.6)
+	tw.chain().tween_interval(GameConstants.TOAST_HOLD_TIME)
+	tw.chain().tween_callback(_dismiss_toast.bind(card, false))
+
+	_relayout_toasts()
+
+
+func _dismiss_toast(card: PanelContainer, instant: bool) -> void:
+	if card == null or not is_instance_valid(card):
+		return
+	_toasts.erase(card)
+	if instant:
+		card.queue_free()
+	else:
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(card, "position:x", GameConstants.CANVAS_WIDTH + 8.0, GameConstants.TOAST_OUT_TIME) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		tw.tween_property(card, "modulate:a", 0.0, GameConstants.TOAST_OUT_TIME)
+		tw.chain().tween_callback(card.queue_free)
+	_relayout_toasts()
+
+
+func _relayout_toasts() -> void:
+	for i in range(_toasts.size()):
+		var card := _toasts[i]
+		if not is_instance_valid(card):
+			continue
+		var target_y := _TOAST_BASE_Y + float(i) * (_TOAST_HEIGHT + _TOAST_GAP)
+		var tw := create_tween()
+		tw.tween_property(card, "position:y", target_y, 0.15) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+# ─── Speed / mute pill buttons ───────────────────────────────────────────────
+
+func _make_pill_button(text: String, pos: Vector2) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.position = pos
+	btn.size = Vector2(44.0, 24.0)
+	btn.focus_mode = Control.FOCUS_NONE
+	_apply_font(btn, 8)
+	_style_pill_button(btn, false)
+	return btn
+
+
+func _style_pill_button(btn: Button, active: bool) -> void:
+	var style := StyleBoxFlat.new()
+	style.set_corner_radius_all(12)
+	style.set_border_width_all(1)
+	if active:
+		style.bg_color = Color(GameConstants.GLOW_REWARD.r, GameConstants.GLOW_REWARD.g, GameConstants.GLOW_REWARD.b, 0.92)
+		style.border_color = Color(1.0, 0.95, 0.70, 0.9)
+		btn.add_theme_color_override("font_color", GameConstants.UI_CARD_TEXT)
+		btn.add_theme_color_override("font_pressed_color", GameConstants.UI_CARD_TEXT)
+		btn.add_theme_color_override("font_hover_color", GameConstants.UI_CARD_TEXT)
+	else:
+		style.bg_color = Color(0.07, 0.08, 0.13, 0.85)
+		style.border_color = Color(0.0, 1.0, 1.0, 0.35)
+		btn.add_theme_color_override("font_color", Color(0.75, 0.85, 0.95, 0.9))
+		btn.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
+		btn.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 1.0))
+	for state_name in ["normal", "hover", "pressed", "focus"]:
+		btn.add_theme_stylebox_override(state_name, style)
+
+
+func _on_speed_button_pressed() -> void:
+	AudioManager.play("ui_click")
+	speed_fast = not speed_fast
+	speed_button.text = "x2" if not speed_fast else "x2 ON"
+	speed_button.size = Vector2(44.0, 24.0) if not speed_fast else Vector2(58.0, 24.0)
+	_style_pill_button(speed_button, speed_fast)
+	speed_toggled.emit(speed_fast)
+
+
+func _on_mute_button_pressed() -> void:
+	muted = not muted
+	mute_button.text = "OFF" if muted else "SND"
+	_style_pill_button(mute_button, muted)
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), muted)
+	Session.set_sound_muted(muted)  # NEW-02: persist across sessions
+	if not muted:
+		AudioManager.play("ui_click")
+
+
+# ─── NEW-01: pause pill + overlay ────────────────────────────────────────────
+
+func _on_pause_button_pressed() -> void:
+	AudioManager.play("ui_click")
+	pause_toggled.emit()
+
+
+func _build_pause_overlay(root: Control) -> void:
+	# Visual-only: every layer ignores the mouse so the resume tap falls
+	# through to game_root._unhandled_input (which also guards aiming).
+	pause_root = Control.new()
+	pause_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_root.visible = false
+	root.add_child(pause_root)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.02, 0.03, 0.06, 0.62)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_root.add_child(dim)
+
+	pause_title_label = Label.new()
+	pause_title_label.text = "PAUSED"
+	pause_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_title_label.position = Vector2(0.0, GameConstants.CANVAS_HEIGHT * 0.42)
+	pause_title_label.size = Vector2(GameConstants.CANVAS_WIDTH, 30.0)
+	pause_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_title_label.modulate = Color(0.86, 0.95, 1.0, 1.0)
+	_apply_font(pause_title_label, 22)
+	pause_root.add_child(pause_title_label)
+
+	pause_hint_label = Label.new()
+	pause_hint_label.text = "TAP TO RESUME"
+	pause_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_hint_label.position = Vector2(0.0, GameConstants.CANVAS_HEIGHT * 0.42 + 42.0)
+	pause_hint_label.size = Vector2(GameConstants.CANVAS_WIDTH, 16.0)
+	pause_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_hint_label.modulate = Color(0.62, 0.74, 0.86, 0.9)
+	_apply_font(pause_hint_label, 9)
+	pause_root.add_child(pause_hint_label)
+
+
+func set_paused(paused: bool) -> void:
+	if pause_root != null:
+		pause_root.visible = paused
+	if pause_button != null:
+		pause_button.text = ">" if paused else "II"
+		_style_pill_button(pause_button, paused)
+
+
+# ─── Level-up 3-card overlay ─────────────────────────────────────────────────
+
+func _build_levelup_ui(root: Control) -> void:
+	levelup_root = Control.new()
+	levelup_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	levelup_root.visible = false
+	levelup_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(levelup_root)
+
+	# Dim background swallows clicks so gameplay input can't fire underneath.
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.0, 0.0, 0.0, 0.55)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	levelup_root.add_child(dim)
+
+	levelup_banner = PanelContainer.new()
+	levelup_banner.position = Vector2(50.0, 150.0)
+	levelup_banner.custom_minimum_size = Vector2(GameConstants.CANVAS_WIDTH - 100.0, 44.0)
+	levelup_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var banner_style := StyleBoxFlat.new()
+	banner_style.bg_color = GameConstants.UI_BANNER_GOLD
+	banner_style.set_corner_radius_all(14)
+	banner_style.shadow_color = Color(0.0, 0.0, 0.0, 0.4)
+	banner_style.shadow_size = 5
+	levelup_banner.add_theme_stylebox_override("panel", banner_style)
+	levelup_root.add_child(levelup_banner)
+
+	var banner_label := Label.new()
+	banner_label.text = "LEVEL UP!"
+	banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	banner_label.add_theme_color_override("font_color", Color(0.16, 0.10, 0.02, 1.0))
+	banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(banner_label, 14)
+	levelup_banner.add_child(banner_label)
+
+	levelup_cards_box = VBoxContainer.new()
+	levelup_cards_box.position = Vector2(40.0, 216.0)
+	levelup_cards_box.size = Vector2(GameConstants.CANVAS_WIDTH - 80.0, 220.0)
+	levelup_cards_box.add_theme_constant_override("separation", 12)
+	levelup_root.add_child(levelup_cards_box)
+
+
+func show_levelup(options: Array) -> void:
+	for child in levelup_cards_box.get_children():
+		child.queue_free()
+	for option in options:
+		levelup_cards_box.add_child(_make_levelup_card(option))
+
+	levelup_root.visible = true
+	levelup_banner.pivot_offset = levelup_banner.custom_minimum_size * 0.5
+	levelup_banner.scale = Vector2(0.4, 0.4)
+	var tw := create_tween()
+	tw.tween_property(levelup_banner, "scale", Vector2(1.06, 1.06), 0.13) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(levelup_banner, "scale", Vector2.ONE, 0.08)
+	AudioManager.play("stage_clear", 1.3)
+
+
+func hide_levelup() -> void:
+	if levelup_root != null:
+		levelup_root.visible = false
+
+
+func _make_levelup_card(option: Dictionary) -> Button:
+	var card := Button.new()
+	card.custom_minimum_size = Vector2(GameConstants.CANVAS_WIDTH - 80.0, 52.0)
+	card.focus_mode = Control.FOCUS_NONE
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = GameConstants.UI_CARD_BG
+	normal.set_corner_radius_all(14)
+	normal.set_border_width_all(2)
+	normal.border_color = Color(0.45, 0.62, 0.95, 0.85)
+	normal.shadow_color = Color(0.0, 0.0, 0.0, 0.3)
+	normal.shadow_size = 4
+	var hover := normal.duplicate()
+	hover.bg_color = Color(0.90, 0.95, 1.0, 1.0)
+	var pressed := normal.duplicate()
+	pressed.border_color = GameConstants.UI_BANNER_GOLD
+	pressed.bg_color = Color(1.0, 0.97, 0.86, 1.0)
+	card.add_theme_stylebox_override("normal", normal)
+	card.add_theme_stylebox_override("hover", hover)
+	card.add_theme_stylebox_override("pressed", pressed)
+	card.add_theme_stylebox_override("focus", normal)
+
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 12.0
+	row.offset_right = -12.0
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(row)
+
+	var star := TextureRect.new()
+	star.custom_minimum_size = Vector2(18.0, 18.0)
+	star.texture = ICON_STAR
+	star.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	star.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	star.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	star.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	star.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(star)
+
+	var text_box := VBoxContainer.new()
+	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.add_theme_constant_override("separation", 3)
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text_box)
+
+	var name_label := Label.new()
+	name_label.text = str(option.get("name", "?"))
+	name_label.add_theme_color_override("font_color", GameConstants.UI_CARD_TEXT)
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(name_label, 9)
+	text_box.add_child(name_label)
+
+	var desc_label := Label.new()
+	desc_label.text = str(option.get("desc", ""))
+	desc_label.add_theme_color_override("font_color", Color(0.45, 0.48, 0.58, 1.0))
+	desc_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_apply_font(desc_label, 6)
+	text_box.add_child(desc_label)
+
+	var key := str(option.get("key", ""))
+	card.pressed.connect(func() -> void:
+		AudioManager.play("ui_click", 1.15)
+		# Reference AC: pick → play resumes within 1–2 frames. Hide first,
+		# then signal so the game advances on this same frame.
+		hide_levelup()
+		levelup_chosen.emit(key)
+	)
+	return card
