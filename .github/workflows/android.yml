@@ -75,6 +75,23 @@ jobs:
           : > android/.gdignore
           test -f android/build/build.gradle && echo "build template installed ($VER)"
 
+      - name: Configure Android SDK / Java paths for headless export
+        # Godot reads the SDK + JDK paths only from editor settings (not env),
+        # and the container ships none — so a headless export aborts with
+        # "A valid Java SDK path is required". Write a minimal editor settings
+        # file pointing at the container's SDK/JDK before exporting.
+        run: |
+          set -e
+          ANDROID_SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$ANDROID_SDK" ] && command -v sdkmanager >/dev/null; then ANDROID_SDK="$(cd "$(dirname "$(command -v sdkmanager)")/../.." && pwd)"; fi
+          JAVA_SDK="${JAVA_HOME:-}"
+          if [ -z "$JAVA_SDK" ]; then J="$(command -v javac || command -v java)"; JAVA_SDK="$(cd "$(dirname "$(readlink -f "$J")")/.." && pwd)"; fi
+          echo "ANDROID_SDK=$ANDROID_SDK"; echo "JAVA_SDK=$JAVA_SDK"
+          mkdir -p ~/.config/godot
+          { echo '[gd_resource type="EditorSettings" format=3]'; echo '[resource]'; echo "export/android/android_sdk_path = \"$ANDROID_SDK\""; echo "export/android/java_sdk_path = \"$JAVA_SDK\""; } > ~/.config/godot/editor_settings-4.tres
+          cp ~/.config/godot/editor_settings-4.tres ~/.config/godot/editor_settings-4.6.tres
+          cat ~/.config/godot/editor_settings-4.tres
+
       - name: Export AAB + APK (signed release)
         working-directory: ${{ env.PROJECT_DIR }}
         env:
