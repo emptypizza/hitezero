@@ -22,35 +22,13 @@ const TEX_ATTACK_FRAMES = [
 const TEX_COMBAT_IDLE: Texture2D = preload("res://assets/textures/player/maid/combat_idle.png")
 const TEX_GAMEOVER_DOWN: Texture2D = preload("res://assets/textures/player/maid/gameover_down.png")
 
-# CEL-04: shared cel+rim material so the maid reads in the same render language
-# as the blocks (banded shade + ink rim + stage rim light). Alpha-keyed in the
-# shader, so the hand-drawn silhouette is untouched.
-const CHARACTER_CEL_SHADER: Shader = preload("res://assets/shaders/character_cel.gdshader")
-static var _character_material: ShaderMaterial = null
-
 const IDLE_FRAME_ORDER = [0, 1, 2, 3, 4, 3, 2, 1]
 const BASE_BODY_POSITION := Vector2(0.0, -33.0)
 const BASE_TRAY_POSITION := Vector2(0.0, -78.0)
 const MAID_TARGET_HEIGHT := 124.0
 const OUTPUT_DURATION := 0.52
-# Hot-flash window follows the duck-flock reference spec (GameConstants.FLASH_LIFE):
-# muzzle glow lives 1–2 frames, the blade trail/particles carry the follow-through.
-const OUTPUT_FLASH_TIME := 0.13
+const OUTPUT_FLASH_TIME := 0.26
 const OUTPUT_PARTICLE_COUNT := 18
-
-# ─── Procedural anim rig (ANIM-01, 2026-06-13) ───────────────────────────────
-# Layered ON TOP of the discrete maid frames so even the static combat-idle
-# reads as alive and dimensional: ~0.55 Hz breathing bob + volume-preserving
-# scale, throw squash→stretch (anticipation then release), an aim lean, and
-# opposite-phase tray/secondary motion. Pure cosmetic transforms — the
-# NemoInput-style aim/fire contract and collision are never touched.
-const BREATH_HZ := 0.55
-const BREATH_BOB_PX := 1.6
-const BREATH_SCALE := 0.022      # peak +Y / -X breathing scale (volume-ish)
-const THROW_SQUASH := 0.13       # anticipation compression
-const THROW_STRETCH := 0.17      # release elongation
-const AIM_LEAN_MAX := 0.16       # rad — lean toward the shot direction
-const RIG_SMOOTH := 16.0         # transform follow speed (higher = snappier)
 
 @onready var tray: Sprite2D = $Tray
 @onready var body: Sprite2D = $Body
@@ -66,11 +44,6 @@ var output_elapsed: float = OUTPUT_DURATION
 var output_angle: float = -PI * 0.5
 var output_particles: Array[Dictionary] = []
 
-# ANIM-01 smoothed rig state (eased toward targets every frame for buttery
-# motion even though the underlying sprite frames are discrete).
-var _rig_squash := Vector2.ONE
-var _rig_lean: float = 0.0
-
 
 func _ready() -> void:
 	tray.texture = TEX_TRAY
@@ -79,9 +52,6 @@ func _ready() -> void:
 	tray.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body.centered = true
 	body.position = BASE_BODY_POSITION
-	# CEL-04: apply the shared cel+rim material once; it persists across the
-	# per-frame texture swaps in _refresh_visual().
-	body.material = _get_character_material()
 	if output_vfx != null and output_vfx.has_method("bind_player"):
 		output_vfx.bind_player(self)
 	_refresh_visual()
@@ -93,31 +63,8 @@ func _process(delta: float) -> void:
 	if _is_output_active():
 		output_elapsed = minf(OUTPUT_DURATION, output_elapsed + delta)
 	_update_output_particles(delta)
-	_update_anim_rig(delta)
 	_refresh_visual()
 	_queue_output_vfx_redraw()
-
-
-func _update_anim_rig(delta: float) -> void:
-	# Resolve transform targets for this frame, then ease toward them so state
-	# changes (e.g. a throw firing) ramp in instead of popping.
-	var target_squash := Vector2.ONE
-	var target_lean: float = 0.0
-	if visual_state == "gameover":
-		target_squash = Vector2(1.06, 0.94)   # settle, slumped
-	elif _is_output_active():
-		var st := clampf(output_elapsed / OUTPUT_DURATION, 0.0, 1.0)
-		target_lean = clampf((output_angle + PI * 0.5) * 0.6, -AIM_LEAN_MAX, AIM_LEAN_MAX)
-		if st < 0.22:
-			var a := st / 0.22                 # anticipation → squash down
-			target_squash = Vector2(1.0 + THROW_SQUASH * a, 1.0 - THROW_SQUASH * a)
-		else:
-			var rel := (st - 0.22) / 0.78
-			var s := (1.0 - rel) * (1.0 - rel) # ease-out release → stretch up
-			target_squash = Vector2(1.0 - THROW_STRETCH * s, 1.0 + THROW_STRETCH * s)
-	var k := clampf(delta * RIG_SMOOTH, 0.0, 1.0)
-	_rig_squash = _rig_squash.lerp(target_squash, k)
-	_rig_lean = lerpf(_rig_lean, target_lean, k)
 
 
 func set_state(new_state: String) -> void:
@@ -137,13 +84,6 @@ func play_output(shot_angle: float) -> void:
 	_spawn_output_particles()
 	_refresh_visual()
 	_queue_output_vfx_redraw()
-
-
-static func _get_character_material() -> ShaderMaterial:
-	if _character_material == null:
-		_character_material = ShaderMaterial.new()
-		_character_material.shader = CHARACTER_CEL_SHADER
-	return _character_material
 
 
 func _is_output_active() -> bool:
@@ -194,17 +134,7 @@ func _refresh_visual() -> void:
 	_fit_body_scale()
 	_sync_body_texture_filter()
 	body.flip_h = (visual_state == "throw" or _is_output_active()) and output_angle < -PI * 0.5
-
-	# ANIM-01: breathing (continuous) × throw squash (eased) on top of the
-	# fitted scale; lean rotation; bob + opposite-phase tray secondary motion.
-	var breath := sin(idle_time * TAU * BREATH_HZ)
-	var breath_scale := Vector2(1.0 - breath * BREATH_SCALE * 0.5, 1.0 + breath * BREATH_SCALE)
-	body.scale *= _rig_squash * breath_scale
-	body.rotation = _rig_lean
-	var bob := Vector2(0.0, -absf(breath) * BREATH_BOB_PX)   # rise on the inhale
-	body.position = BASE_BODY_POSITION + _output_recoil_offset() + bob
-	tray.position = BASE_TRAY_POSITION + Vector2(0.0, absf(breath) * BREATH_BOB_PX * 0.55)
-	tray.rotation = -_rig_lean * 0.4
+	body.position = BASE_BODY_POSITION + _output_recoil_offset()
 
 	var base_body_color := Color.WHITE
 	var base_tray_color := Color.WHITE
