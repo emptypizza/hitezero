@@ -28,12 +28,3 @@ mc95c.jpg
 dist/.submarine_backup/
 dist/_fixed_game_*.png
 dist/netlify-hitezero-*.zip
-
-# Android signing keys — NEVER commit (use GitHub Actions secrets instead)
-*.jks
-*.keystore
-*.b64
-
-# Stray local artifacts (deploy bundles / temp downloads) — not part of the project
-/hitezero-netlify.zip
-/ziYnjCRT
