@@ -57,9 +57,23 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: godot --headless --import || true
 
-      - name: Install Android build template
+      - name: Install Android build template (manual extract)
+        # `godot --install-android-build-template` hangs indefinitely in this
+        # container, so extract android_source.zip directly — the exact same
+        # files the command would install — plus the .gdignore that stops Godot
+        # recursively packing android/build/ into the export.
         working-directory: ${{ env.PROJECT_DIR }}
-        run: godot --headless --verbose --install-android-build-template
+        run: |
+          set -e
+          SRC="$(find ~/.local/share/godot/export_templates -name android_source.zip | head -1)"
+          echo "android_source.zip: $SRC"
+          test -n "$SRC"
+          VER="$(basename "$(dirname "$SRC")")"
+          mkdir -p android/build
+          unzip -q -o "$SRC" -d android/build/
+          printf '%s' "$VER" > android/.build_version
+          : > android/.gdignore
+          test -f android/build/build.gradle && echo "build template installed ($VER)"
 
       - name: Export AAB + APK (signed release)
         working-directory: ${{ env.PROJECT_DIR }}
