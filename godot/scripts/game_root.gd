@@ -972,7 +972,9 @@ func _update_shake(delta: float) -> void:
 			world.scale = Vector2.ONE
 		return
 
-	var amt := trauma * trauma  # trauma² — soft ramp, smooth tail
+	# P6: reduce-motion accessibility scales shake/zoom amplitude (1.0 full · 0.5 low · 0.0 off).
+	var motion := Session.shake_scale
+	var amt := trauma * trauma * motion  # trauma² — soft ramp, smooth tail
 	_shake_seed_t += delta * 28.0
 
 	# Smooth (non-buzzing) noise offset, biased opposite the impact direction.
@@ -983,7 +985,7 @@ func _update_shake(delta: float) -> void:
 	var offset := (noise_off * (1.0 - SHAKE_DIR_BIAS) + shake_direction * SHAKE_DIR_BIAS) \
 		* SHAKE_MAX_OFFSET * amt
 	var roll := _shake_noise.get_noise_2d(_shake_seed_t, _shake_seed_t) * SHAKE_MAX_ROLL * amt
-	var s := 1.0 + zoom_kick
+	var s := 1.0 + zoom_kick * motion
 
 	# Pivot rotation + zoom about the canvas centre so the playfield doesn't
 	# lurch toward a corner. global = pos + R·(s·p); keep centre C fixed.

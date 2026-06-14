@@ -18,6 +18,8 @@ var upgrade_pow: int = 0         # +2 POW mini-knives per level (max 2)
 var upgrade_drop: int = 0        # +3% item drop per level (max 3)
 
 var sound_muted: bool = false    # NEW-02: persisted HUD mute pill state
+var shake_scale: float = 1.0     # P6: reduce-motion / screen-shake intensity (1.0 full · 0.5 low · 0.0 off)
+var seen_tutorial: bool = false  # P2: first-run onboarding (How-To) has been shown once
 
 # ─── Stats ─────────────────────────────────────────────────────────────────
 var total_runs: int = 0
@@ -97,6 +99,8 @@ func load_progress() -> void:
 		total_items_collected = int(config.get_value("stats", "total_items_collected", 0))
 
 		sound_muted = bool(config.get_value("settings", "sound_muted", false))
+		shake_scale = clampf(float(config.get_value("settings", "shake_scale", 1.0)), 0.0, 1.0)
+		seen_tutorial = bool(config.get_value("settings", "seen_tutorial", false))
 
 
 func save_progress() -> void:
@@ -122,6 +126,8 @@ func save_progress() -> void:
 	config.set_value("stats", "total_items_collected", total_items_collected)
 
 	config.set_value("settings", "sound_muted", sound_muted)
+	config.set_value("settings", "shake_scale", shake_scale)
+	config.set_value("settings", "seen_tutorial", seen_tutorial)
 
 	config.save(SAVE_PATH)
 	_save_dirty = false
@@ -133,6 +139,36 @@ func set_sound_muted(muted: bool) -> void:
 	if sound_muted == muted:
 		return
 	sound_muted = muted
+	_mark_dirty()
+
+
+# P6: reduce-motion / screen-shake intensity, persisted like the mute pill.
+func set_shake_scale(value: float) -> void:
+	value = clampf(value, 0.0, 1.0)
+	if is_equal_approx(shake_scale, value):
+		return
+	shake_scale = value
+	_mark_dirty()
+
+
+# Cycles Full → Low → Off → Full and returns the new value (for a UI toggle).
+func cycle_shake_scale() -> float:
+	var next := 0.5
+	if shake_scale > 0.75:
+		next = 0.5
+	elif shake_scale > 0.25:
+		next = 0.0
+	else:
+		next = 1.0
+	set_shake_scale(next)
+	return shake_scale
+
+
+# P2: mark the first-run onboarding as shown (persisted) so it appears only once.
+func mark_tutorial_seen() -> void:
+	if seen_tutorial:
+		return
+	seen_tutorial = true
 	_mark_dirty()
 
 
