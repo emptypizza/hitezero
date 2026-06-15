@@ -157,7 +157,12 @@ func _build_layout() -> void:
 	button_box.add_child(coins_label)
 
 	var footer := Label.new()
-	footer.text = "Keyboard: A/D or Arrows   Pointer: drag to aim"
+	# P3: platform-aware control hint. The drag instruction is universal (mouse OR
+	# touch both drag-to-aim); the keyboard line is desktop-only. is_touchscreen_available()
+	# reports true on Android native AND on the web build running on a phone, so touch
+	# players never see an irrelevant keyboard hint. (has_feature("mobile") is false on web.)
+	footer.text = "Drag to aim   ·   release to throw" if DisplayServer.is_touchscreen_available() \
+		else "Drag to aim · release to throw      Keys: A/D or ← →"
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	footer.add_theme_font_size_override("font_size", 12)
 	footer.modulate = Color(0.44, 0.48, 0.55, 1.0)
@@ -168,6 +173,13 @@ func _build_layout() -> void:
 	_build_modal()
 	_build_shop_modal()
 	_build_stats_modal()
+
+	# P2: first-run onboarding — auto-open How To Play once for brand-new players,
+	# so the drag-to-aim control is taught before the first game instead of buried
+	# behind an opt-in button. Persisted via Session so returners never see it.
+	if not Session.seen_tutorial:
+		how_to_modal.visible = true
+		Session.mark_tutorial_seen()
 
 
 func _apply_label_shadow(label: Label, shadow_color: Color, outline_size: int) -> void:
@@ -213,8 +225,10 @@ func _make_panel_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
 func _build_modal() -> void:
 	how_to_modal = PanelContainer.new()
 	how_to_modal.visible = false
-	how_to_modal.position = Vector2(28.0, 180.0)
-	how_to_modal.size = Vector2(GameConstants.CANVAS_WIDTH - 56.0, 300.0)
+	how_to_modal.position = Vector2(28.0, 128.0)
+	how_to_modal.size = Vector2(GameConstants.CANVAS_WIDTH - 56.0, 432.0)
+	# Opaque panel so the auto-opened first-run modal reads cleanly over the title/character.
+	how_to_modal.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.05, 0.10, 0.97), Color(0.42, 0.70, 1.0, 0.45)))
 	add_child(how_to_modal)
 
 	var modal_vbox := VBoxContainer.new()
@@ -237,12 +251,26 @@ func _build_modal() -> void:
 		"2. Clear every STAR block to finish the stage.",
 		"3. Falling RED_ENEMY blocks remove hearts if they reach the danger zone.",
 		"4. Destroyed STAR blocks add knives for the next stage.",
+		"5. Catch glowing ORBS for power-ups (pierce, spread, shield...).",
+		"6. Grab the gold COINS, then spend them in Upgrades.",
 	]:
 		var label := Label.new()
 		label.text = line
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.add_theme_font_size_override("font_size", 14)
 		modal_vbox.add_child(label)
+
+	# P6: reduce-motion / screen-shake intensity toggle (accessibility), persisted.
+	var shake_label := func(v: float) -> String:
+		return "Screen Shake:  %s" % ("Full" if v > 0.75 else ("Low" if v > 0.25 else "Off"))
+	var shake_btn := Button.new()
+	shake_btn.text = shake_label.call(Session.shake_scale)
+	shake_btn.custom_minimum_size = Vector2(0.0, 38.0)
+	shake_btn.add_theme_font_size_override("font_size", 14)
+	shake_btn.pressed.connect(func() -> void:
+		shake_btn.text = shake_label.call(Session.cycle_shake_scale())
+	)
+	modal_vbox.add_child(shake_btn)
 
 	var close_button := Button.new()
 	close_button.text = "Close"

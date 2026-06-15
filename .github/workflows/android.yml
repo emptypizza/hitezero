@@ -10,7 +10,7 @@ name: Android (AAB + APK)
 #
 # REQUIRED REPO SECRETS  (Settings -> Secrets and variables -> Actions)
 #   ANDROID_KEYSTORE_BASE64    base64 of your upload keystore (.jks)
-#                              make it:  base64 -w0 new_upload_key.jks  > key.b64
+#                              make it:  base64 -w0 hitezero_upload.jks  > key.b64
 #   ANDROID_KEY_ALIAS          the key alias (keytool -list -v -keystore *.jks)
 #   ANDROID_KEYSTORE_PASSWORD  the keystore password (assumes key pw == store pw)
 #
@@ -57,9 +57,40 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: godot --headless --import || true
 
-      - name: Install Android build template
+      - name: Install Android build template (manual extract)
+        # `godot --install-android-build-template` hangs indefinitely in this
+        # container, so extract android_source.zip directly — the exact same
+        # files the command would install — plus the .gdignore that stops Godot
+        # recursively packing android/build/ into the export.
         working-directory: ${{ env.PROJECT_DIR }}
-        run: godot --headless --verbose --install-android-build-template
+        run: |
+          set -e
+          SRC="$(find ~/.local/share/godot/export_templates -name android_source.zip | head -1)"
+          echo "android_source.zip: $SRC"
+          test -n "$SRC"
+          VER="$(basename "$(dirname "$SRC")")"
+          mkdir -p android/build
+          unzip -q -o "$SRC" -d android/build/
+          printf '%s' "$VER" > android/.build_version
+          : > android/.gdignore
+          test -f android/build/build.gradle && echo "build template installed ($VER)"
+
+      - name: Configure Android SDK / Java paths for headless export
+        # Godot reads the SDK + JDK paths only from editor settings (not env),
+        # and the container ships none — so a headless export aborts with
+        # "A valid Java SDK path is required". Write a minimal editor settings
+        # file pointing at the container's SDK/JDK before exporting.
+        run: |
+          set -e
+          ANDROID_SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$ANDROID_SDK" ] && command -v sdkmanager >/dev/null; then ANDROID_SDK="$(cd "$(dirname "$(command -v sdkmanager)")/../.." && pwd)"; fi
+          JAVA_SDK="${JAVA_HOME:-}"
+          if [ -z "$JAVA_SDK" ]; then J="$(command -v javac || command -v java)"; JAVA_SDK="$(cd "$(dirname "$(readlink -f "$J")")/.." && pwd)"; fi
+          echo "ANDROID_SDK=$ANDROID_SDK"; echo "JAVA_SDK=$JAVA_SDK"
+          mkdir -p ~/.config/godot
+          { echo '[gd_resource type="EditorSettings" format=3]'; echo '[resource]'; echo "export/android/android_sdk_path = \"$ANDROID_SDK\""; echo "export/android/java_sdk_path = \"$JAVA_SDK\""; } > ~/.config/godot/editor_settings-4.tres
+          cp ~/.config/godot/editor_settings-4.tres ~/.config/godot/editor_settings-4.6.tres
+          cat ~/.config/godot/editor_settings-4.tres
 
       - name: Export AAB + APK (signed release)
         working-directory: ${{ env.PROJECT_DIR }}

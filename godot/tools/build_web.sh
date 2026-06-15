@@ -97,6 +97,8 @@ cat > "$SITE_DIR/index.html" <<'EOF'
       width: 100%;
       height: 100%;
       overflow: hidden;
+      overscroll-behavior: none;   /* P4/P8: stop iOS rubber-band / Chrome pull-to-refresh */
+      touch-action: none;          /* let drag gestures reach the WebGL canvas, not page pan */
       background: #050510;
       color: #dbeafe;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

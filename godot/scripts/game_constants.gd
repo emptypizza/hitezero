@@ -94,7 +94,7 @@ const ITEM_COLORS: Dictionary = {
 }
 
 const ITEM_ORB_RADIUS := 8.0
-const ITEM_ORB_SPEED := 45.0
+const ITEM_ORB_SPEED := 157.5   # item orb fall speed (45.0 × 3.5 — faster drop per design tuning)
 
 # ─── Boss system ───────────────────────────────────────────────────────────
 const BOSS_STAGE_INTERVAL := 5
