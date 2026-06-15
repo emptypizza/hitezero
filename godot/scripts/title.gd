@@ -225,8 +225,8 @@ func _make_panel_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
 func _build_modal() -> void:
 	how_to_modal = PanelContainer.new()
 	how_to_modal.visible = false
-	how_to_modal.position = Vector2(28.0, 166.0)
-	how_to_modal.size = Vector2(GameConstants.CANVAS_WIDTH - 56.0, 352.0)
+	how_to_modal.position = Vector2(28.0, 128.0)
+	how_to_modal.size = Vector2(GameConstants.CANVAS_WIDTH - 56.0, 432.0)
 	# Opaque panel so the auto-opened first-run modal reads cleanly over the title/character.
 	how_to_modal.add_theme_stylebox_override("panel", _make_panel_style(Color(0.04, 0.05, 0.10, 0.97), Color(0.42, 0.70, 1.0, 0.45)))
 	add_child(how_to_modal)
@@ -251,6 +251,8 @@ func _build_modal() -> void:
 		"2. Clear every STAR block to finish the stage.",
 		"3. Falling RED_ENEMY blocks remove hearts if they reach the danger zone.",
 		"4. Destroyed STAR blocks add knives for the next stage.",
+		"5. Catch glowing ORBS for power-ups (pierce, spread, shield...).",
+		"6. Grab the gold COINS, then spend them in Upgrades.",
 	]:
 		var label := Label.new()
 		label.text = line

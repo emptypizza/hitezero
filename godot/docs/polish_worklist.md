@@ -58,6 +58,6 @@
 ## ⚠️ Cascade (게임코드 변경 결과 — 사용자 인지 필요)
 - 변경 파일: `session.gd`·`title.gd`·`game_root.gd`(게임) + `build_web.sh`·`deploy_netlify_polished.sh`·`manifest.webmanifest`(웹).
 - **스크린샷 4장: 재촬영 불필요** — 변경이 인게임 HUD/비주얼 무변(P2/P3 타이틀, P6 기본 no-op). 기존 유효.
-- **AAB: 새 CI 빌드 필요** — 게임코드가 바뀌어 `~/hitezero_release`의 AAB는 stale. `git tag` 또는 Actions 재실행. versionCode 1 유지(미제출).
+- **AAB: 재빌드+재검증 완료** ✅ — 커밋 `450ea2b` → 태그 `v1.0.0` → CI run 27513597341(2m49s) → bundletool split 에뮬 설치·부팅·플레이·폴리싱 렌더(P2/P3/P6)·크래시0 검증. `~/hitezero_release/hitezero-android/hitezero.aab` = 폴리싱 v1.0.0(jar verified, vc1). **제출 준비 완료.**
 - **웹: 재배포 필요** — P4/P8 반영 빌드를 라이브로(계정 토큰 대기 중).
-- 커밋: 하드룰대로 **사람 확인 후** 선별 스테이징.
+- 커밋: 폴리싱분 `450ea2b` 완료. 잔여(47 구파일 삭제 + 이전 untracked)는 별도 housekeeping.
