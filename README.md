@@ -1,101 +1,102 @@
-# HiteZero
+# HiteZero — Neon Knife Arcade
 
-> Survive waves of enemies. Take zero hits.
+![HiteZero key art](store_assets/hitezero_keyart_16x9.png)
 
-세로 화면(400×700) 아케이드 게임. 바닥의 파들(paddle)을 드래그해서 나이프 세례를 발사하고, 화면 위의 블록을 깨며 진행합니다. 별(STAR) 블록을 모두 부수면 스테이지 클리어, 빨간 적(RED_ENEMY)이 바닥에 닿거나 하트가 0이 되면 게임 오버입니다. 스프라이트 아틀라스의 한글 제목은 "유성막기"입니다.
+> Throw knives, ricochet them off the walls, and smash every neon block on the board.
+> A fast, one-thumb neon arcade game — a fresh twist on the classic brick breaker.
 
-Godot 4.4 + GDScript로 작성됐고, 데스크톱과 웹(no-threads) 양쪽으로 빌드됩니다. 그림 에셋 없이도 돌아가도록 모든 비주얼이 프로시저럴 드로잉으로 구현돼 있습니다.
+<p>
+  <img alt="Engine" src="https://img.shields.io/badge/Godot-4.6.2-478CBF?logo=godotengine&logoColor=white">
+  <img alt="Renderer" src="https://img.shields.io/badge/Renderer-GL%20Compatibility-4B5563">
+  <img alt="Platforms" src="https://img.shields.io/badge/Platforms-Android%20%7C%20Web-22C55E">
+  <img alt="License" src="https://img.shields.io/badge/License-AGPL--3.0-orange">
+</p>
 
-## 프로젝트 구조
+---
 
-```
-/                       Godot 프로젝트 루트
-├── project.godot       엔진 설정 (4.4, GL Compatibility, 400×700 portrait)
-├── export_presets.cfg  웹 export preset
-├── icon.svg            앱 아이콘
-├── scenes/             .tscn (boot / title / game / hud / player / knife / block)
-├── scripts/            .gd (game_root, level_generator, 각 엔티티, session 등)
-├── docs/               패리티 스펙, 웹 검증 로그, FX 롤아웃 노트
-├── tools/              build_web.sh, QA 테스트 액션
-├── progress.md         마이그레이션 로그
-└── LICENSE
-```
+## What is it
 
-이전에는 같은 리포 안에 [phaser/](phaser/), [pj0zero/](pj0zero/), 그리고 루트 레벨 Godot까지 총 4개의 구현이 섞여 있었는데, Godot 포트만 남기고 전부 정리했습니다. 배경은 [progress.md](progress.md)와 [docs/phaser_parity_spec.md](docs/phaser_parity_spec.md)를 참고하세요.
+HiteZero is a free, fully-offline arcade game built in **Godot 4.6.2**. Drag to aim, release to fire,
+and let your knives **ricochet off the walls and tray** to clear the board. Bank shots and ricochet
+chains let the best players wipe out half the board in a single flick — simple to learn, satisfying
+to master.
 
-## 게임플레이
+- **100% free** — no in-app purchases, ever
+- **No ads** — zero interruptions
+- **Fully offline** — no account, no sign-up, no data collected (only `VIBRATE` permission)
 
-- **조준 (AIMING)** — 드래그로 발사 각도 지정. 점선 가이드 표시, 각도는 바닥으로 못 쏘게 클램프.
-- **발사 (SHOOTING)** — 놓으면 나이프가 66ms 간격으로 720 px/s로 발사됨. 이때부터 빨간 적이 낙하 시작.
-- **튕겨내기** — 비행 중에도 파들을 좌우로 움직일 수 있고, 내려오는 나이프가 파들에 닿으면 타격 위치에 따라 반사각이 결정됨.
+## Screenshots
 
-### 블록 타입
+<p>
+  <img src="store_assets/play_screen_1.png" width="200" alt="Dense board + combo">
+  <img src="store_assets/play_screen_2.png" width="200" alt="POW burst">
+  <img src="store_assets/play_screen_3.png" width="200" alt="Red-enemy threat board">
+  <img src="store_assets/play_screen_4.png" width="200" alt="Boss fight">
+</p>
 
-| 타입 | HP | 효과 |
-|---|---|---|
-| `NORMAL` | 현재 레벨 | 일반 벽돌 |
-| `STAR` | 1 | 전부 부수면 스테이지 클리어 |
-| `POW` | 1 | 파괴 시 60% 속도의 미니 나이프 8개로 폭발 |
-| `RED_ENEMY` | 현재 레벨 | 발사 후 낙하 시작, 바닥 닿으면 하트 -1 |
+## How to play
 
-### 종료 조건
+- **Drag to aim, release to throw** — pure one-hand control (mouse drag or touch). Desktop also supports `A`/`D` / arrow keys.
+- Clear every **STAR** block to finish the stage.
+- Trigger **POW** blocks for a radial knife burst.
+- Stop the falling **RED ENEMY** blocks before they reach the bottom — let one through and you lose a heart (3 to start).
+- Catch glowing **orbs** for power-ups (pierce, spread, magnet, blast, shield, slow) and grab **coins** to buy permanent upgrades.
+- Survive escalating stages, chain **combos** (up to 5×), and take on **boss fights**.
 
-- **스테이지 클리어** — 모든 `STAR` 블록 제거. 남은 나이프 수는 다음 스테이지로 이월.
-- **게임 오버** — (A) 모든 나이프가 비활성 상태이고 스폰 대기열이 비었을 때, 또는 (B) 하트가 0이 됐을 때.
+## Features
 
-## 실행 방법
+- Ricochet physics with bank shots and tray juggles
+- Combo system (4 tiers, up to 5× multiplier) with rising audio pitch
+- 6 power-up items, 8 permanent upgrades, a coin economy, and run stats
+- Boss encounters with health bars and telegraphed patterns
+- CEL 2.5D neon visuals — wet-floor reflections, fake-3D slab depth, particle VFX
+- Game feel: trauma-based screen shake, gameplay-scoped hit-stop, haptics
+- Accessibility: screen-shake intensity toggle (Full / Low / Off), persistent mute
 
-### 에디터로 실행
+## Tech stack
 
-Godot 4.4+에서 [project.godot](project.godot)을 열고 **F5**를 누르면 `scenes/boot.tscn → title.tscn → game.tscn` 흐름으로 부팅됩니다.
+| | |
+|---|---|
+| Engine | Godot **4.6.2**, GL Compatibility renderer (mobile-friendly) |
+| Language | GDScript |
+| Design resolution | 400 × 700 (portrait) |
+| Android | `com.gghf.hitezero` · v1.0.0 · arm64-v8a · target SDK 35 · `VIBRATE` only |
+| Web | HTML5 export (single-threaded / "nothreads"), static-host friendly |
+| Save | Local `user://save.cfg` (offline; nothing leaves the device) |
 
-### 웹 빌드
+## Build & run
+
+This is a standard Godot project — the game lives in [`godot/`](godot/). Open `godot/project.godot`
+in the Godot 4.6 editor and press play, or use the helper scripts:
 
 ```bash
-bash tools/build_web.sh
+# Web (HTML5) — exports + assembles a static site under dist/godot-web/site_nothreads
+bash godot/tools/build_web.sh dist/godot-web
+
+# Android (signed AAB + APK) — via GitHub Actions
+#   push a tag (git tag v1.0.0 && git push origin v1.0.0) or run the
+#   "Android (AAB + APK)" workflow manually; signing uses repo secrets.
 ```
 
-산출물:
+## Project structure
 
-- `build/godot-web/site_nothreads/` — 언팩된 웹 사이트 (godot.js + game.zip + index.html)
-- `build/godot-web/hitezero-godot-web-site_nothreads.zip` — 그대로 업로드 가능한 묶음
-
-로컬 서빙:
-
-```bash
-python3 -m http.server 8123 --directory build/godot-web/site_nothreads
-# http://127.0.0.1:8123/index.html
+```
+godot/
+├── project.godot            # Godot 4.6 project (autoloads, display, rendering)
+├── scenes/                  # boot → title → game (+ block, knife, player, hud)
+├── scripts/                 # game_root, hud, boss, player, level_generator, session, ...
+├── assets/                  # textures, shaders, fonts
+├── tools/                   # build_web.sh, deploy_netlify_polished.sh, tests
+└── docs/                    # gameplay_spec (contract), release guides, design plans
+store_assets/                # store listing: icon, feature graphic, screenshots, key art
+.github/workflows/           # android.yml — signed AAB/APK CI
 ```
 
-빌드 스크립트는 `godot --headless --export-pack "Web" game.zip`으로 pack을 만들고, Godot의 `web_nothreads_release.zip` 템플릿에 그 pack과 커스텀 `index.html`을 얹어서 no-threads 사이트를 조립합니다. 템플릿 경로가 자동 탐지되지 않으면 `GODOT_TEMPLATE_DIR` 환경변수로 지정하세요.
+## Status
 
-## 아키텍처 주요 파일
+🟢 **v1.0.0 — launch-ready.** Signed AAB built and verified (emulator boot + bundletool split
+install); store assets, screenshots, and listing copy prepared. Google Play submission in progress.
 
-- [scripts/game_root.gd](scripts/game_root.gd) — 메인 컨트롤러(약 746줄). 입력, 나이프 스폰, 수동 circle-vs-AABB 충돌, 반사, `AIMING`/`SHOOTING`/`STAGE_CLEAR`/`GAME_OVER` 상태 머신.
-- [scripts/game_constants.gd](scripts/game_constants.gd) — 밸런스 상수, 블록 타입 enum, 팔레트.
-- [scripts/level_generator.gd](scripts/level_generator.gd) — 스테이지별 프로시저럴 그리드 생성.
-- [scripts/player.gd](scripts/player.gd), [scripts/knife.gd](scripts/knife.gd), [scripts/block.gd](scripts/block.gd) — 프로시저럴 렌더링 + 엔티티 개별 동작.
-- [scripts/hud.gd](scripts/hud.gd) — 하트, 점수, 오버레이. 비인터랙티브 컨트롤은 `MOUSE_FILTER_IGNORE`로 게임플레이 입력을 먹지 않음.
-- [scripts/session.gd](scripts/session.gd) — 오토로드. 세션 간 상태 보존.
+## License
 
-주의할 물리 룰:
-
-- 최소 Y 속도(약 18 px/s) 클램프로 얕은 수평 루프를 방지.
-- 파들-나이프 충돌은 **하강 중인 나이프에만** 적용 → 상승 중인 나이프를 다시 잡는 사고 방지.
-
-### JS 브릿지 (웹 빌드용)
-
-[scripts/game_root.gd](scripts/game_root.gd)에서 브라우저 자동화/검증용으로 노출:
-
-- `window.render_game_to_text()` — 현재 프레임의 텍스트 스냅샷
-- `window.advanceTime(ms)` — 시뮬레이션 고정 시간 진행
-- `window.__hitezero_state_json` — 블록/나이프/파들/모드 JSON 상태
-
-## 알려진 이슈
-
-- Godot 4.6의 `--export-release Web ...` 프리셋 구성 에러. 현재는 `--export-pack` 기반 경로가 안정적이며, 그 경로를 사용하는 `tools/build_web.sh`가 정식 빌드 수단입니다.
-- 수동 QA 남은 항목: 드래그 조준 정확도, 발사 중 파들 드래그, 모바일 터치 느낌.
-
-## 라이선스
-
-[LICENSE](LICENSE) 참조.
+Licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE).
