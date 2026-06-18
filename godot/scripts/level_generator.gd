@@ -101,6 +101,11 @@ static func get_boss_type(level: int) -> int:
 	return boss_index
 
 
+# Test hook for the refactor golden-trace harness: a non-negative value makes
+# layout deterministic. Production leaves it at -1 (fresh random layout per run).
+static var _forced_seed: int = -1
+
+
 static func init_level(game_root, level: int) -> void:
 	game_root.clear_level_nodes()
 	game_root.pending_stars = 0
@@ -112,7 +117,10 @@ static func init_level(game_root, level: int) -> void:
 		return
 
 	var rng := RandomNumberGenerator.new()
-	rng.randomize()
+	if _forced_seed >= 0:
+		rng.seed = _forced_seed + level
+	else:
+		rng.randomize()
 
 	var base_hp := _base_hp(level)
 	var pattern := _pick_pattern(level, rng)

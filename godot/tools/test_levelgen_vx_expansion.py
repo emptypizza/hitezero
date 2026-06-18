@@ -19,6 +19,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LEVELGEN = ROOT / "scripts" / "level_generator.gd"
 GAME_ROOT = ROOT / "scripts" / "game_root.gd"
+BOSS_SYSTEM = ROOT / "scripts" / "systems" / "boss_system.gd"
+VFX_SYSTEM = ROOT / "scripts" / "systems" / "vfx_system.gd"
 BLOCK = ROOT / "scripts" / "block.gd"
 SHADER = ROOT / "assets" / "shaders" / "rounded_block.gdshader"
 
@@ -47,6 +49,8 @@ def extract_pool(source: str, name: str) -> list[list[str]]:
 def main() -> None:
     levelgen = LEVELGEN.read_text(encoding="utf-8")
     game_root = GAME_ROOT.read_text(encoding="utf-8")
+    boss_system = BOSS_SYSTEM.read_text(encoding="utf-8")
+    vfx_system = VFX_SYSTEM.read_text(encoding="utf-8")
     block = BLOCK.read_text(encoding="utf-8")
     require(SHADER.exists(), "assets/shaders/rounded_block.gdshader must exist")
     shader = SHADER.read_text(encoding="utf-8")
@@ -126,18 +130,18 @@ def main() -> None:
     require(alpha <= 0.2,
             "VX-01: reflections must stay subtle (alpha <= 0.2) for readability")
 
-    # ── VX-03: bubble pop ────────────────────────────────────────────────────
-    require("func _spawn_bubble_pop" in game_root,
+    # ── VX-03: bubble pop (spawner + particles moved to vfx_system.gd) ───────
+    require("func spawn_bubble_pop" in vfx_system,
             "VX-03: bubble-pop spawner must exist")
-    require('"shape": "bubble"' in game_root,
-            "VX-03: bubbles must ride the existing vfx_particles system")
-    require('"bubble":' in game_root.split("func _draw_vfx_particles", 1)[1],
-            "VX-03: _draw_vfx_particles needs a bubble branch")
-    require("_spawn_bubble_pop(bpos, false)" in game_root,
+    require('"shape": "bubble"' in vfx_system,
+            "VX-03: bubbles must ride the vfx_particles system")
+    require('"bubble":' in vfx_system.split("func draw_particles_into", 1)[1],
+            "VX-03: draw_particles_into needs a bubble branch")
+    require("_vfx.spawn_bubble_pop(bpos, false)" in game_root,
             "VX-03: elite (RED_ENEMY) destroy must trigger a small pop")
-    require("_spawn_bubble_pop(bpos + offset, true)" in game_root,
+    require("_vfx.spawn_bubble_pop(bpos + offset, true)" in boss_system,
             "VX-03: boss defeat explosions must trigger big pops")
-    update_fn = game_root.split("func _update_vfx_particles", 1)[1].split("func ", 1)[0]
+    update_fn = vfx_system.split("func update_particles", 1)[1].split("func ", 1)[0]
     require("bubble" in update_fn,
             "VX-03: bubbles need buoyancy in the particle update")
 

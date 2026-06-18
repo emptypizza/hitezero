@@ -9,6 +9,9 @@ const Knife = preload("res://scripts/knife.gd")
 const LevelGen = preload("res://scripts/level_generator.gd")
 const Player = preload("res://scripts/player.gd")
 const BossScript = preload("res://scripts/boss.gd")
+const ItemSystem = preload("res://scripts/systems/item_system.gd")
+const BossSystem = preload("res://scripts/systems/boss_system.gd")
+const VfxSystem = preload("res://scripts/systems/vfx_system.gd")
 
 signal ui_updated(data: Dictionary)
 signal stage_cleared(next_level: int, heart_bonus: int)
@@ -38,6 +41,7 @@ var knife_count: int = 3
 var knives_to_spawn: int = 0
 var pending_stars: int = 0
 var hearts: int = GameConstants.HEARTS_MAX
+var _revive_used_this_run := false  ## v1.1: one rewarded revive per run (gated by AdsManager).
 var score: int = 0
 var aim_angle: float = -PI * 0.5
 var dragging: bool = false
@@ -57,16 +61,11 @@ var combo_timer: float = 0.0
 var combo_best: int = 0
 
 # ─── Item system ───────────────────────────────────────────────────────────
-var item_slots: Array[int] = []  # ItemType values
-var item_timers: Array[float] = []  # remaining duration per slot
-var item_orbs: Array[Dictionary] = []  # {x, y, vy, type, life}
-var stages_since_item_drop: int = 0
-var _blast_in_progress: bool = false
+var _items: ItemSystem  # item slots, falling orbs, BLAST AoE (Slice 1 extraction)
 
 # ─── Boss system ───────────────────────────────────────────────────────────
-var current_boss: Boss = null
-var is_boss_stage: bool = false
-var boss_warning_timer: float = 0.0
+var _boss: BossSystem  # boss lifecycle, collision, defeat (Slice 2 extraction)
+var _vfx: VfxSystem     # particles: bursts/sparks/bg/fireflies/coins (Slice 3 extraction)
 
 # ─── Reference-DNA systems (docs/duckflock_reference_goal_plan.md) ──────────
 # game_speed scales SIMULATION delta only; hit-stop, shake, flash, HUD tweens
@@ -81,8 +80,6 @@ var _juggle_bonus_given: bool = false    # FL-02: one juggle bonus knife per sta
 const BRIDGE_UPDATE_INTERVAL := 0.1      # P1-1: event emits stay immediate
 const TRAY_BOUNCE_SCORE := 15            # FL-02
 const TRAY_JUGGLE_STREAK_TARGET := 5     # FL-02
-var coin_shards: Array[Dictionary] = []  # kill-chain loot: scatter → magnet
-var _coin_streak: int = 0                # rising collect-tick pitch
 var stars_total: int = 0                 # objective pill denominator
 var levelup_open: bool = false
 # Run-scoped modifiers (reset every run, separate from Session meta upgrades).
@@ -93,8 +90,6 @@ var run_tray_bonus: float = 0.0
 var run_buffs: Dictionary = {}           # buff key -> remaining seconds
 var _burst_destroy_count: int = 0        # destroys inside the group-kill window
 var _burst_destroy_timer: float = 0.0
-var firefly_particles: Array[Dictionary] = []
-var _firefly_spawn_acc: float = 0.0
 
 var hitstop_remaining: float = 0.0
 # ─── Screen shake (trauma² model) ───────────────────────────────────────────
@@ -113,10 +108,6 @@ var shake_direction := Vector2.ZERO    # bias direction (kept for QA hooks/tests
 var _shake_noise: FastNoiseLite = null
 var _shake_seed_t: float = 0.0
 var hit_reaction_remaining: float = 0.0
-var impact_bursts: Array[Dictionary] = []
-var vfx_particles: Array[Dictionary] = []
-var bg_particles: Array[Dictionary] = []
-var _bg_spawn_acc: float = 0.0
 var _flash_rect: ColorRect = null
 var _flash_start_msec: int = -1
 var _flash_start_alpha: float = 0.0
@@ -125,6 +116,9 @@ var web_bridge_ready: bool = false
 
 
 func _ready() -> void:
+	_items = ItemSystem.new(self)
+	_boss = BossSystem.new(self)
+	_vfx = VfxSystem.new(self)
 	ensure_input_actions()
 	_setup_timers()
 	_setup_web_bridge()
@@ -164,10 +158,10 @@ func _process(delta: float) -> void:
 
 	_update_effects(delta)
 	_update_flash_overlay()
-	_update_vfx_particles(delta)
-	_update_bg_particles(delta)
-	_update_fireflies(delta)
-	_update_coin_shards(delta)
+	_vfx.update_particles(delta)
+	_vfx.update_bg(delta)
+	_vfx.update_fireflies(delta)
+	_vfx.update_coins(delta)
 	_refresh_player_visuals()
 	# P1-1: the full-state serialization is too heavy to run per frame on web;
 	# throttle the ambient refresh — event paths still push immediately via
@@ -195,8 +189,8 @@ func _process(delta: float) -> void:
 	player.set_waiting_knives(knife_count, state == GameConstants.GameState.AIMING)
 
 	# Boss warning countdown
-	if boss_warning_timer > 0.0:
-		boss_warning_timer = maxf(0.0, boss_warning_timer - delta)
+	if _boss.warning_timer > 0.0:
+		_boss.warning_timer = maxf(0.0, _boss.warning_timer - delta)
 
 	if state == GameConstants.GameState.SHOOTING:
 		# Pause knife spawning while frozen so the spawn cadence resumes intact.
@@ -206,15 +200,15 @@ func _process(delta: float) -> void:
 			# above keep their own clock so hit-stop/shake still read at speed.
 			var sim_delta := delta * game_speed
 			_update_combo_timer(sim_delta)
-			_update_item_timers(sim_delta)
+			_items.update_timers(sim_delta)
 			_update_run_buffs(sim_delta)
 			_update_group_kill(sim_delta)
-			_update_item_orbs(sim_delta)
+			_items.update_orbs(sim_delta)
 			_update_knives(sim_delta)
 			_update_red_enemies(sim_delta)
-			if current_boss != null:
-				current_boss.update_boss(sim_delta)
-				boss_hp_updated.emit(current_boss.hp, current_boss.max_hp)
+			if _boss.current != null:
+				_boss.current.update_boss(sim_delta)
+				boss_hp_updated.emit(_boss.current.hp, _boss.current.max_hp)
 			_check_win_lose()
 
 	queue_redraw()
@@ -229,15 +223,15 @@ func _exit_tree() -> void:
 
 
 func _draw() -> void:
-	_draw_bg_particles()
+	_vfx.draw_bg_into(self)
 	_draw_background()
 	_draw_block_depth()
 	_draw_wet_reflections()
-	_draw_fireflies()
-	_draw_impact_bursts()
-	_draw_vfx_particles()
-	_draw_item_orbs()
-	_draw_coin_shards()
+	_vfx.draw_fireflies_into(self)
+	_vfx.draw_bursts_into(self)
+	_vfx.draw_particles_into(self)
+	_items.draw_orbs_into(self)
+	_vfx.draw_coins_into(self)
 	_draw_aim_line()
 	_draw_collider_debug()
 
@@ -335,6 +329,7 @@ func _start_new_run() -> void:
 	level = 1
 	knife_count = Session.get_starting_knives()
 	hearts = Session.get_max_hearts()
+	_revive_used_this_run = false
 	score = 0
 	pending_stars = 0
 	knives_to_spawn = 0
@@ -348,9 +343,7 @@ func _start_new_run() -> void:
 	shake_direction = Vector2.ZERO
 	hit_reaction_remaining = 0.0
 	hitstop_remaining = 0.0
-	impact_bursts.clear()
-	vfx_particles.clear()
-	bg_particles.clear()
+	_vfx.reset()
 	world.position = Vector2.ZERO
 	world.rotation = 0.0
 	world.scale = Vector2.ONE
@@ -361,15 +354,9 @@ func _start_new_run() -> void:
 	hit_combo = 0
 	combo_timer = 0.0
 	combo_best = 0
-	item_slots.clear()
-	item_timers.clear()
-	item_orbs.clear()
-	stages_since_item_drop = 0
-	_blast_in_progress = false
+	_items.reset()
 	# Run-scoped modifiers reset with the run; the x2 toggle is a player
 	# preference and survives across runs.
-	coin_shards.clear()
-	_coin_streak = 0
 	run_damage_bonus = 0
 	group_dmg_bonus = 0
 	run_speed_mult = 1.0
@@ -379,12 +366,12 @@ func _start_new_run() -> void:
 	_burst_destroy_timer = 0.0
 	levelup_open = false
 	hud.hide_levelup()
-	_cleanup_boss()
+	_boss.cleanup()
 	overlay_reset.emit()
 	_clear_all_knives()
 	LevelGen.init_level(self, level)
 	stars_total = _get_stars_left()
-	_init_boss_if_needed()
+	_boss.init_if_needed()
 	_emit_ui_update()
 
 
@@ -480,7 +467,7 @@ func _play_release_commit_cue() -> void:
 	var muzzle := Vector2(fire_x, paddle_y - GameConstants.PADDLE_Y_OFFSET)
 	player.play_output(aim_angle)
 	_kick_world(-shot_dir, 3.0, 0.08)
-	_burst_feedback(muzzle, Color(1.0, 0.90, 0.30, 0.78), 10.0, 0.12)
+	_vfx.burst_feedback(muzzle, Color(1.0, 0.90, 0.30, 0.78), 10.0, 0.12)
 
 
 func _on_spawn_timer_timeout() -> void:
@@ -501,7 +488,7 @@ func _spawn_knife() -> void:
 	knife.configure(Vector2(fire_x, paddle_y - GameConstants.PADDLE_Y_OFFSET), velocity, false)
 	player.play_output(aim_angle)
 	_kick_world(-velocity.normalized(), 2.0, 0.05)
-	_burst_feedback(knife.position, Color(1.0, 0.78, 0.25, 0.82), 12.0, GameConstants.FLASH_LIFE)
+	_vfx.burst_feedback(knife.position, Color(1.0, 0.78, 0.25, 0.82), 12.0, GameConstants.FLASH_LIFE)
 	AudioManager.play("knife_launch")
 
 
@@ -520,8 +507,8 @@ func _update_knives(delta: float) -> void:
 
 		# TimeWeaver boss: slow knives inside time zones
 		var effective_delta := delta
-		if current_boss != null and not current_boss.is_defeated():
-			effective_delta *= current_boss.get_time_slow_factor(knife.position)
+		if _boss.current != null and not _boss.current.is_defeated():
+			effective_delta *= _boss.current.get_time_slow_factor(knife.position)
 		knife.step(effective_delta)
 		var velocity := knife.velocity
 		var kx := knife.position.x
@@ -554,7 +541,7 @@ func _update_knives(delta: float) -> void:
 					var speed := velocity.length()
 					velocity = Vector2(sin(bounce_angle) * speed, -cos(bounce_angle) * speed)
 					knife.position.y = tray_rect.position.y - radius
-					_burst_feedback(knife.position, Color(0.29, 0.87, 0.50, 1.0), 12.0, 0.18)
+					_vfx.burst_feedback(knife.position, Color(0.29, 0.87, 0.50, 1.0), 12.0, 0.18)
 					AudioManager.play("tray_bounce")
 					_add_trauma(0.12)
 					Haptics.light()
@@ -566,8 +553,8 @@ func _update_knives(delta: float) -> void:
 			knife.deactivate()
 			continue
 
-		if current_boss != null and not current_boss.is_defeated():
-			_check_boss_collision(knife)
+		if _boss.current != null and not _boss.current.is_defeated():
+			_boss.check_collision(knife)
 		_check_block_collision(knife, blocks_layer)
 		_check_block_collision(knife, moving_blocks_layer)
 
@@ -640,7 +627,7 @@ func _check_block_collision(knife: Knife, container: Node2D) -> void:
 			_hit_block(block, impact_dir)
 
 			# Spread: spawn 2 mini-knives on hit
-			if _has_active_item(GameConstants.ItemType.SPREAD):
+			if _items.has_active(GameConstants.ItemType.SPREAD):
 				var base_angle := knife.velocity.angle()
 				_spawn_mini_knife(block.global_position, base_angle + 0.6)
 				_spawn_mini_knife(block.global_position, base_angle - 0.6)
@@ -652,11 +639,11 @@ func _hit_block(block: Block, impact_dir: Vector2 = Vector2.ZERO) -> void:
 	var remaining_hp := block.take_damage(_get_knife_damage(), impact_dir)
 	_register_combo_hit()
 	var hit_color := block.get_hit_color()
-	_burst_feedback(block.global_position, hit_color, 14.0, GameConstants.HIT_BURST_LIFE)
-	_spawn_hit_vfx(block.global_position, hit_color)
+	_vfx.burst_feedback(block.global_position, hit_color, 14.0, GameConstants.HIT_BURST_LIFE)
+	_vfx.spawn_hit_vfx(block.global_position, hit_color)
 	# Directional sparks fly back out along the surface normal (-impact_dir).
 	if impact_dir.length_squared() > 0.0001:
-		_spawn_impact_sparks(block.global_position, -impact_dir, hit_color)
+		_vfx.spawn_impact_sparks(block.global_position, -impact_dir, hit_color)
 	AudioManager.play("block_hit", _combo_pitch())
 	Haptics.light()
 	if remaining_hp <= 0:
@@ -699,13 +686,13 @@ func _destroy_block(block: Block) -> void:
 		_camera_punch(0.012)
 		Haptics.medium()
 
-	_spawn_destroy_vfx(bpos, block_type)
+	_vfx.spawn_destroy_vfx(bpos, block_type)
 	# VX-03: elite kills read a tier above normal destroys.
 	if block_type == GameConstants.BLOCK_RED_ENEMY:
-		_spawn_bubble_pop(bpos, false)
+		_vfx.spawn_bubble_pop(bpos, false)
 	# Kill chain (reference spec): pop → loot shards next frame → counter punch
 	# on collect. Every destroy gets a loot moment.
-	_spawn_coin_shards(bpos, block_type)
+	_vfx.spawn_coin_shards(bpos, block_type)
 	_register_burst_destroy()
 	var base_score := 100
 	var multiplier := _get_combo_multiplier()
@@ -714,17 +701,17 @@ func _destroy_block(block: Block) -> void:
 		_spawn_combo_text(bpos, multiplier)
 
 	# Blast: AoE damage to nearby blocks
-	if _has_active_item(GameConstants.ItemType.BLAST):
-		_blast_aoe(bpos, 80.0)
+	if _items.has_active(GameConstants.ItemType.BLAST):
+		_items.blast_aoe(bpos, 80.0)
 
 	# Item drop chance (with pity system + upgrade)
 	var drop_chance := GameConstants.ITEM_DROP_BASE + Session.get_item_drop_bonus()
 	if block_type == GameConstants.BLOCK_RED_ENEMY:
 		drop_chance = GameConstants.ITEM_DROP_ENEMY + Session.get_item_drop_bonus()
-	if stages_since_item_drop >= GameConstants.ITEM_PITY_STAGES:
+	if _items.stages_since_drop >= GameConstants.ITEM_PITY_STAGES:
 		drop_chance += 0.15
 	if randf() < drop_chance:
-		_spawn_item_orb(bpos)
+		_items.spawn_orb(bpos)
 
 	# Coins + stats
 	Session.total_blocks_destroyed += 1
@@ -747,7 +734,7 @@ func _update_red_enemies(delta: float) -> void:
 		if block == null or block.block_type != GameConstants.BLOCK_RED_ENEMY or block.is_destroyed():
 			continue
 
-		var speed_mult := 0.4 if _has_active_item(GameConstants.ItemType.SLOW) else 1.0
+		var speed_mult := 0.4 if _items.has_active(GameConstants.ItemType.SLOW) else 1.0
 		block.advance_enemy(delta * speed_mult)
 		# World-local rect vs the world-local bottom band — unaffected by shake.
 		var rect := block.get_local_aabb()
@@ -765,14 +752,14 @@ func _update_red_enemies(delta: float) -> void:
 			continue
 		block.hp = 0
 		# Shield: absorb one enemy hit
-		if _has_active_item(GameConstants.ItemType.SHIELD):
-			_consume_item(GameConstants.ItemType.SHIELD)
-			_burst_feedback(block.global_position, Color(0.30, 1.0, 0.55, 1.0), 20.0, 0.28)
+		if _items.has_active(GameConstants.ItemType.SHIELD):
+			_items.consume(GameConstants.ItemType.SHIELD)
+			_vfx.burst_feedback(block.global_position, Color(0.30, 1.0, 0.55, 1.0), 20.0, 0.28)
 			_flash_screen(Color(0.30, 1.0, 0.55, 1.0), 0.3, 0.12)
 			AudioManager.play("block_destroy_star")
 		else:
 			hearts -= 1
-			_burst_feedback(block.global_position, Color(0.94, 0.27, 0.27, 1.0), 18.0, 0.24)
+			_vfx.burst_feedback(block.global_position, Color(0.94, 0.27, 0.27, 1.0), 18.0, 0.24)
 			_play_hit_reaction()
 			AudioManager.play("enemy_warning")
 		block.queue_free()
@@ -784,12 +771,12 @@ func _update_red_enemies(delta: float) -> void:
 
 func _check_win_lose() -> void:
 	# Boss stage: win when boss is defeated (and all segments for Splitter)
-	if is_boss_stage:
-		if current_boss != null and current_boss.is_defeated():
-			if current_boss.boss_type == GameConstants.BossType.SPLITTER and current_boss.are_segments_alive():
+	if _boss.is_stage:
+		if _boss.current != null and _boss.current.is_defeated():
+			if _boss.current.boss_type == GameConstants.BossType.SPLITTER and _boss.current.are_segments_alive():
 				pass  # Main body dead but segments remain — keep fighting
 			else:
-				_trigger_boss_defeated()
+				_boss.trigger_defeated()
 				return
 	else:
 		if _get_stars_left() == 0:
@@ -808,8 +795,8 @@ func _check_win_lose() -> void:
 		_trigger_game_over()
 
 	# Boss phase 3 descend: if boss touches bottom, game over
-	if current_boss != null and not current_boss.is_defeated():
-		if current_boss.position.y + current_boss.get_body_size().y * 0.5 > GameConstants.CANVAS_HEIGHT - 40.0:
+	if _boss.current != null and not _boss.current.is_defeated():
+		if _boss.current.position.y + _boss.current.get_body_size().y * 0.5 > GameConstants.CANVAS_HEIGHT - 40.0:
 			_trigger_game_over()
 
 
@@ -831,8 +818,8 @@ func _trigger_stage_clear() -> void:
 	player.scale = Vector2.ONE
 	hit_combo = 0
 	combo_timer = 0.0
-	item_orbs.clear()
-	stages_since_item_drop += 1
+	_items.orbs.clear()
+	_items.stages_since_drop += 1
 	_flash_screen(Color(0.35, 1.0, 0.55, 1.0), 0.6, 0.24)
 	AudioManager.play("stage_clear")
 	_emit_ui_update()
@@ -854,8 +841,8 @@ func _run_stage_clear_sequence() -> void:
 	for block in remaining:
 		if is_instance_valid(block) and not block.is_destroyed():
 			var bpos: Vector2 = block.global_position
-			_spawn_destroy_vfx(bpos, block.block_type)
-			_burst_feedback(bpos, Color(0.35, 1.0, 0.55, 0.8), 10.0, 0.18)
+			_vfx.spawn_destroy_vfx(bpos, block.block_type)
+			_vfx.burst_feedback(bpos, Color(0.35, 1.0, 0.55, 0.8), 10.0, 0.18)
 			score += 50
 			block.queue_free()
 			AudioManager.play("block_destroy_normal")
@@ -874,10 +861,71 @@ func _run_stage_clear_sequence() -> void:
 	_open_levelup()
 
 
+# ─── v1.1 rewarded revive (no-op while AdsManager.ADS_ENABLED == false) ──────
+const REVIVE_OFFER_SECONDS := 6.0
+const REVIVE_KNIFE_GRANT := 5
+
+
 func _trigger_game_over() -> void:
 	if state == GameConstants.GameState.GAME_OVER:
 		return
 
+	# Offer one rewarded "watch ad to revive" before committing the loss.
+	# AdsManager.is_revive_available() is always false while ADS_ENABLED == false,
+	# so the v1.0 build runs the original game-over path below unchanged.
+	if not _revive_used_this_run and AdsManager.is_revive_available():
+		_offer_revive()
+		return
+
+	_commit_game_over()
+
+
+func _offer_revive() -> void:
+	# Freeze the field like a game over while the player decides.
+	state = GameConstants.GameState.GAME_OVER
+	if not spawn_timer.is_stopped():
+		spawn_timer.stop()
+	_clear_all_knives()
+	hit_reaction_remaining = 0.0
+	var prompt := preload("res://scripts/revive_prompt.gd").new()
+	prompt.setup(REVIVE_OFFER_SECONDS, _on_revive_accepted, _on_revive_declined)
+	add_child(prompt)
+
+
+func _on_revive_accepted() -> void:
+	AdsManager.request_revive(_grant_revive, _on_revive_finished)
+
+
+func _grant_revive() -> void:
+	_revive_used_this_run = true
+	_resume_after_revive()
+
+
+func _on_revive_finished(granted: bool) -> void:
+	# Ad closed without earning the reward → fall through to a real game over.
+	if not granted and state == GameConstants.GameState.GAME_OVER:
+		_commit_game_over()
+
+
+func _on_revive_declined() -> void:
+	_commit_game_over()
+
+
+func _resume_after_revive() -> void:
+	hearts = maxi(hearts, 1)
+	if knife_count <= 0:
+		knife_count += REVIVE_KNIFE_GRANT
+	hit_combo = 0
+	combo_timer = 0.0
+	trauma = 0.0
+	zoom_kick = 0.0
+	Engine.time_scale = 1.0
+	world.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	state = GameConstants.GameState.AIMING
+	_emit_ui_update()
+
+
+func _commit_game_over() -> void:
 	state = GameConstants.GameState.GAME_OVER
 	if not spawn_timer.is_stopped():
 		spawn_timer.stop()
@@ -948,13 +996,7 @@ func _update_effects(delta: float) -> void:
 
 	_update_shake(delta)
 
-	for index in range(impact_bursts.size() - 1, -1, -1):
-		var burst: Dictionary = impact_bursts[index]
-		burst["life"] = float(burst["life"]) - delta
-		if float(burst["life"]) <= 0.0:
-			impact_bursts.remove_at(index)
-		else:
-			impact_bursts[index] = burst
+	_vfx.update_bursts(delta)
 
 
 func _update_shake(delta: float) -> void:
@@ -1018,7 +1060,7 @@ func _emit_ui_update() -> void:
 	# HUD or web bridge consumes has changed. Real changes still emit (and
 	# serialize) on the same tick, so event timing is unchanged.
 	var signature: Array = [hearts, knife_count, score, level, state, _get_stars_left(),
-		stars_total, hit_combo, combo_timer, combo_best, item_slots, item_timers,
+		stars_total, hit_combo, combo_timer, combo_best, _items.slots, _items.timers,
 		group_dmg_bonus, run_buffs, game_paused]
 	if signature == _last_ui_signature:
 		return
@@ -1034,8 +1076,8 @@ func _emit_ui_update() -> void:
 		"combo": hit_combo,
 		"combo_timer": combo_timer,
 		"combo_best": combo_best,
-		"item_slots": item_slots.duplicate(),
-		"item_timers": item_timers.duplicate(),
+		"item_slots": _items.slots.duplicate(),
+		"item_timers": _items.timers.duplicate(),
 		"group_dmg_bonus": group_dmg_bonus,
 		"run_buffs": run_buffs.duplicate(),
 	})
@@ -1055,16 +1097,6 @@ func _get_stars_left() -> int:
 			if block != null and block.block_type == GameConstants.BLOCK_STAR and not block.is_destroyed():
 				count += 1
 	return count
-
-
-func _burst_feedback(at: Vector2, color: Color, radius: float, life: float) -> void:
-	impact_bursts.append({
-		"position": at,
-		"color": color,
-		"radius": radius,
-		"life": life,
-		"max_life": life,
-	})
 
 
 func _get_tray_rect() -> Rect2:
@@ -1121,12 +1153,12 @@ func _draw_wet_reflections() -> void:
 				rect.size.x - 10.0, mirror_h * 0.55), col_far)
 
 	# Boss — one large mirror sells the floor on boss stages.
-	if current_boss != null and is_instance_valid(current_boss) and not current_boss.is_defeated():
-		var bs := current_boss.get_body_size()
-		var bcol: Color = current_boss.boss_color
+	if _boss.current != null and is_instance_valid(_boss.current) and not _boss.current.is_defeated():
+		var bs := _boss.current.get_body_size()
+		var bcol: Color = _boss.current.boss_color
 		bcol = Color(bcol.r * 0.35, bcol.g * 0.35, bcol.b * 0.45, REFLECT_ALPHA_BLOCK + 0.02)
-		draw_rect(Rect2(current_boss.position.x - bs.x * 0.5 + 3.0,
-			current_boss.position.y + bs.y * 0.5 + REFLECT_OFFSET,
+		draw_rect(Rect2(_boss.current.position.x - bs.x * 0.5 + 3.0,
+			_boss.current.position.y + bs.y * 0.5 + REFLECT_OFFSET,
 			bs.x - 6.0, bs.y * REFLECT_SQUASH), bcol)
 
 	# Knives — a faint glint trailing under each active blade.
@@ -1222,9 +1254,9 @@ func _draw_block_depth() -> void:
 				]), face_col)
 
 	# Boss: one large contact shadow grounds the arena body.
-	if current_boss != null and is_instance_valid(current_boss) and not current_boss.is_defeated():
-		var bs := current_boss.get_body_size()
-		_draw_contact_shadow(current_boss.position + Vector2(0.0, bs.y * 0.5 + 4.0), bs.x * 0.46)
+	if _boss.current != null and is_instance_valid(_boss.current) and not _boss.current.is_defeated():
+		var bs := _boss.current.get_body_size()
+		_draw_contact_shadow(_boss.current.position + Vector2(0.0, bs.y * 0.5 + 4.0), bs.x * 0.46)
 
 	# Maid: elliptical contact shadow under her feet anchors her to the floor.
 	_draw_contact_shadow(Vector2(paddle_x, paddle_y + 20.0), 24.0)
@@ -1237,17 +1269,6 @@ func _draw_contact_shadow(center: Vector2, radius: float) -> void:
 	draw_circle(Vector2.ZERO, radius, Color(col.r, col.g, col.b, col.a * 0.45))
 	draw_circle(Vector2.ZERO, radius * 0.62, col)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
-
-
-func _draw_impact_bursts() -> void:
-	for burst in impact_bursts:
-		var life := float(burst["life"])
-		var max_life := float(burst["max_life"])
-		var t := life / max_life
-		var radius := lerpf(float(burst["radius"]), float(burst["radius"]) + 12.0, 1.0 - t)
-		var color: Color = burst["color"]
-		color.a = 0.6 * t
-		draw_circle(burst["position"], radius, color)
 
 
 func _draw_aim_line() -> void:
@@ -1334,12 +1355,12 @@ func _on_stage_timer_timeout() -> void:
 	fire_x = paddle_x
 	player.scale = Vector2.ONE
 	player.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	_cleanup_boss()
+	_boss.cleanup()
 	overlay_reset.emit()
 	_clear_all_knives()
 	LevelGen.init_level(self, level)
 	stars_total = _get_stars_left()
-	_init_boss_if_needed()
+	_boss.init_if_needed()
 	_emit_ui_update()
 
 
@@ -1367,7 +1388,14 @@ func _clear_web_bridge_state() -> void:
 func _update_web_bridge_state() -> void:
 	if not web_bridge_ready:
 		return
+	var json := JSON.stringify(get_state_payload())
+	JavaScriptBridge.eval("window.__hitezero_state_json = " + JSON.stringify(json) + ";", true)
 
+
+# Single source of truth for the runtime state snapshot. The web bridge serializes
+# it for browser capture; the refactor golden-trace harness reads it directly in
+# headless (where web_bridge_ready is false). Behavior of the bridge is unchanged.
+func get_state_payload() -> Dictionary:
 	var blocks: Array[Dictionary] = []
 	for container in [blocks_layer, moving_blocks_layer]:
 		for child in container.get_children():
@@ -1423,8 +1451,8 @@ func _update_web_bridge_state() -> void:
 		"collider_debug": show_collider_debug,
 		"combo": hit_combo,
 		"combo_timer": snappedf(combo_timer, 0.01),
-		"item_slots": item_slots,
-		"item_orbs_count": item_orbs.size(),
+		"item_slots": _items.slots,
+		"item_orbs_count": _items.orbs.size(),
 		"stars_total": stars_total,
 		"game_speed": game_speed,
 		"levelup_open": levelup_open,
@@ -1433,10 +1461,9 @@ func _update_web_bridge_state() -> void:
 		"run_speed_mult": snappedf(run_speed_mult, 0.01),
 		"run_tray_bonus": run_tray_bonus,
 		"run_buffs": run_buffs,
-		"coin_shards_count": coin_shards.size(),
+		"coin_shards_count": _vfx.coin_shards.size(),
 	}
-	var json := JSON.stringify(payload)
-	JavaScriptBridge.eval("window.__hitezero_state_json = " + JSON.stringify(json) + ";", true)
+	return payload
 
 
 func _game_state_name() -> String:
@@ -1505,7 +1532,7 @@ func _spawn_combo_text(at: Vector2, multiplier: float) -> void:
 	var tier := _get_combo_tier()
 	var color: Color = GameConstants.COMBO_COLORS[mini(tier, GameConstants.COMBO_COLORS.size() - 1)]
 	# Use VFX particles as floating text indicators
-	vfx_particles.append({
+	_vfx.vfx_particles.append({
 		"x": at.x,
 		"y": at.y - 12.0,
 		"vx": 0.0,
@@ -1516,385 +1543,6 @@ func _spawn_combo_text(at: Vector2, multiplier: float) -> void:
 		"max_life": 0.55,
 		"shape": "star",
 	})
-
-
-# ─── Item system ───────────────────────────────────────────────────────────
-
-func _update_item_timers(delta: float) -> void:
-	var changed := false
-	for i in range(item_timers.size() - 1, -1, -1):
-		item_timers[i] -= delta
-		if item_timers[i] <= 0.0:
-			item_slots.remove_at(i)
-			item_timers.remove_at(i)
-			changed = true
-	if changed:
-		_emit_ui_update()
-
-
-func _spawn_item_orb(at: Vector2) -> void:
-	var pool: Array[int] = [
-		GameConstants.ItemType.PIERCE,
-		GameConstants.ItemType.SPREAD,
-		GameConstants.ItemType.MAGNET,
-		GameConstants.ItemType.BLAST,
-		GameConstants.ItemType.SHIELD,
-		GameConstants.ItemType.SLOW,
-	]
-	var item_type: int = pool[randi() % pool.size()]
-	item_orbs.append({
-		"x": at.x,
-		"y": at.y,
-		"vy": GameConstants.ITEM_ORB_SPEED,
-		"type": item_type,
-		"life": 6.0,
-		"pulse": 0.0,
-	})
-	stages_since_item_drop = 0
-
-
-func _update_item_orbs(delta: float) -> void:
-	var tray_rect := _get_tray_rect()
-	for i in range(item_orbs.size() - 1, -1, -1):
-		var orb: Dictionary = item_orbs[i]
-		orb["y"] = float(orb["y"]) + float(orb["vy"]) * delta
-		orb["life"] = float(orb["life"]) - delta
-		orb["pulse"] = float(orb["pulse"]) + delta
-
-		# Collect if near paddle
-		var ox := float(orb["x"])
-		var oy := float(orb["y"])
-		var dist_to_paddle := Vector2(ox - paddle_x, oy - paddle_y).length()
-
-		# Magnet effect: if active, pull orbs toward paddle
-		if _has_active_item(GameConstants.ItemType.MAGNET):
-			var pull_dir := Vector2(paddle_x - ox, paddle_y - oy).normalized()
-			orb["x"] = ox + pull_dir.x * 120.0 * delta
-			orb["y"] = float(orb["y"]) + pull_dir.y * 120.0 * delta
-			dist_to_paddle = Vector2(float(orb["x"]) - paddle_x, float(orb["y"]) - paddle_y).length()
-
-		if dist_to_paddle < 32.0:
-			_collect_item(int(orb["type"]))
-			_burst_feedback(Vector2(float(orb["x"]), float(orb["y"])),
-				GameConstants.ITEM_COLORS.get(int(orb["type"]), Color.WHITE), 16.0, 0.22)
-			AudioManager.play("block_destroy_star")
-			item_orbs.remove_at(i)
-			continue
-
-		# Remove if off-screen or expired
-		if float(orb["y"]) > GameConstants.CANVAS_HEIGHT + 20.0 or float(orb["life"]) <= 0.0:
-			item_orbs.remove_at(i)
-			continue
-
-		item_orbs[i] = orb
-
-
-func _collect_item(item_type: int) -> void:
-	Session.total_items_collected += 1
-	if item_slots.size() < Session.get_item_max_slots():
-		item_slots.append(item_type)
-		item_timers.append(GameConstants.ITEM_DURATION)
-	else:
-		# Replace oldest slot
-		item_slots[0] = item_type
-		item_timers[0] = GameConstants.ITEM_DURATION
-	var item_name: String = GameConstants.ITEM_NAMES.get(item_type, "?")
-	hud.show_toast("%s %ds" % [item_name, int(GameConstants.ITEM_DURATION)],
-		GameConstants.ITEM_COLORS.get(item_type, Color.WHITE))
-	_emit_ui_update()
-
-
-func _has_active_item(item_type: int) -> bool:
-	for i in range(item_slots.size()):
-		if item_slots[i] == item_type and item_timers[i] > 0.0:
-			return true
-	return false
-
-
-func _consume_item(item_type: int) -> void:
-	for i in range(item_slots.size()):
-		if item_slots[i] == item_type:
-			item_slots.remove_at(i)
-			item_timers.remove_at(i)
-			_emit_ui_update()
-			return
-
-
-func _blast_aoe(center: Vector2, radius: float) -> void:
-	if _blast_in_progress:
-		return  # prevent infinite recursion (Blast triggers _destroy_block which triggers Blast)
-	_blast_in_progress = true
-	var hit_any := false
-	for container in [blocks_layer, moving_blocks_layer]:
-		for child in container.get_children():
-			var block := child as Block
-			if block == null or block.is_destroyed():
-				continue
-			if block.global_position.distance_to(center) <= radius:
-				# Blast follows the run-scoped damage model, same as direct knife hits.
-				block.take_damage(_get_knife_damage())
-				_burst_feedback(block.global_position, Color(1.0, 0.35, 0.15, 0.7), 10.0, 0.14)
-				hit_any = true
-				if block.is_destroyed():
-					_destroy_block(block)
-	_blast_in_progress = false
-	if hit_any:
-		_vfx_ring(center, Color(1.0, 0.25, 0.15, 0.65), 0.35)
-		AudioManager.play("block_destroy_pow")
-
-
-# ─── Boss system ───────────────────────────────────────────────────────────
-
-func _init_boss_if_needed() -> void:
-	is_boss_stage = LevelGen.is_boss_stage(level)
-	if not is_boss_stage:
-		return
-
-	var boss_type := LevelGen.get_boss_type(level)
-	current_boss = Boss.new()
-	current_boss.position = Vector2(GameConstants.CANVAS_WIDTH * 0.5, 160.0)
-	current_boss.z_index = 5
-	world.add_child(current_boss)
-	current_boss.configure(boss_type, level)
-	current_boss.defeated.connect(_on_boss_defeated)
-	current_boss.phase_changed.connect(_on_boss_phase_changed)
-	current_boss.minion_spawn_requested.connect(_on_boss_minion_spawn)
-
-	# Show warning sequence
-	boss_warning_timer = GameConstants.BOSS_WARNING_DURATION
-	boss_started.emit(current_boss.boss_name, current_boss.boss_color)
-	_flash_screen(Color(1.0, 0.15, 0.15, 1.0), 0.35, 0.3)
-	AudioManager.play("enemy_warning")
-
-
-func _cleanup_boss() -> void:
-	if current_boss != null:
-		if is_instance_valid(current_boss):
-			current_boss.queue_free()
-		current_boss = null
-	is_boss_stage = false
-
-
-func _check_boss_collision(knife: Knife) -> void:
-	if not knife.active or current_boss == null or current_boss.is_defeated():
-		return
-
-	# Check mirror blocks first (Mirror boss)
-	if current_boss.boss_type == GameConstants.BossType.MIRROR:
-		for mb in current_boss._mirror_blocks:
-			if int(mb["hp"]) <= 0:
-				continue
-			var mpos := Vector2(float(mb["x"]), float(mb["y"]))
-			if knife.position.distance_to(mpos) <= knife.radius + 18.0:
-				current_boss.hit_mirror_block(knife.position)
-				_register_combo_hit()
-				_burst_feedback(mpos, Color(0.6, 0.8, 1.0, 0.9), 14.0, 0.18)
-				_spawn_hit_vfx(mpos, Color(0.6, 0.8, 1.0))
-				AudioManager.play("block_hit", _combo_pitch())
-				# Bounce knife
-				var normal := (knife.position - mpos).normalized()
-				knife.position += normal * 4.0
-				var vel := knife.velocity
-				if absf(normal.x) > absf(normal.y):
-					vel.x = -vel.x
-				else:
-					vel.y = -vel.y
-				knife.set_velocity(vel)
-				return
-
-	# Check spawner shield (must break shield before core takes damage)
-	if current_boss.boss_type == GameConstants.BossType.SPAWNER and current_boss.is_shielded():
-		var body_rect := current_boss.get_body_rect()
-		var shield_r := maxf(body_rect.size.x, body_rect.size.y) * 0.5 + 10.0
-		if knife.position.distance_to(current_boss.position) <= knife.radius + shield_r:
-			current_boss.take_spawner_shield_hit()
-			_register_combo_hit()
-			_burst_feedback(knife.position, Color(1.0, 0.4, 0.3, 0.8), 12.0, 0.14)
-			AudioManager.play("block_hit", _combo_pitch())
-			# Bounce
-			var normal := (knife.position - current_boss.position).normalized()
-			if normal.length_squared() < 0.001:
-				normal = Vector2(0.0, -1.0)
-			knife.position += normal * 4.0
-			var vel := knife.velocity
-			if absf(normal.x) > absf(normal.y):
-				vel.x = -vel.x
-			else:
-				vel.y = -vel.y
-			knife.set_velocity(vel)
-			_emit_ui_update()
-			return
-
-	# Check splitter segments
-	if current_boss.boss_type == GameConstants.BossType.SPLITTER:
-		if current_boss.hit_split_segment(knife.position):
-			_register_combo_hit()
-			_burst_feedback(knife.position, Color(0.85, 0.6, 0.2, 0.9), 12.0, 0.16)
-			_spawn_hit_vfx(knife.position, Color(0.85, 0.55, 0.15))
-			AudioManager.play("block_hit", _combo_pitch())
-			score += int(15.0 * _get_combo_multiplier())
-			if not _pierce_active():
-				var normal := (knife.position - current_boss.position).normalized()
-				if normal.length_squared() < 0.001:
-					normal = Vector2(0.0, -1.0)
-				knife.position += normal * 3.0
-				var vel := knife.velocity
-				vel.y = -vel.y
-				knife.set_velocity(vel)
-			_emit_ui_update()
-			return
-
-	# Check main body
-	var body_rect := current_boss.get_body_rect()
-	var test_x := clampf(knife.position.x, body_rect.position.x, body_rect.position.x + body_rect.size.x)
-	var test_y := clampf(knife.position.y, body_rect.position.y, body_rect.position.y + body_rect.size.y)
-	var dist := knife.position.distance_to(Vector2(test_x, test_y))
-
-	if dist <= knife.radius:
-		var remaining := current_boss.take_hit(knife.position)
-		_register_combo_hit()
-		_burst_feedback(knife.position, current_boss.boss_color, 14.0, 0.18)
-		_spawn_hit_vfx(knife.position, current_boss.boss_color)
-		AudioManager.play("block_hit", _combo_pitch())
-		Haptics.light()
-
-		# Score with combo
-		var multiplier := _get_combo_multiplier()
-		score += int(20.0 * multiplier)
-		if multiplier > 1.0:
-			_spawn_combo_text(knife.position, multiplier)
-		_emit_ui_update()
-
-		# Bounce knife (unless pierce)
-		if not _pierce_active():
-			var normal := (knife.position - current_boss.position).normalized()
-			if normal.length_squared() < 0.001:
-				normal = Vector2(0.0, -1.0)
-			knife.position += normal * 4.0
-			var vel := knife.velocity
-			if absf(normal.x) > absf(normal.y):
-				vel.x = -vel.x
-			else:
-				vel.y = -vel.y
-			knife.set_velocity(vel)
-
-		# Spread effect
-		if _has_active_item(GameConstants.ItemType.SPREAD):
-			var base_angle := knife.velocity.angle()
-			_spawn_mini_knife(knife.position, base_angle + 0.6)
-			_spawn_mini_knife(knife.position, base_angle - 0.6)
-
-
-func _on_boss_defeated() -> void:
-	pass  # Handled by _trigger_boss_defeated in _check_win_lose
-
-
-func _on_boss_phase_changed(new_phase: int) -> void:
-	_freeze_frame(0.2)
-	_flash_screen(Color(1.0, 1.0, 1.0, 1.0), 0.5, 0.15)
-	boss_phase_changed.emit(new_phase)
-	AudioManager.play("enemy_warning")
-
-
-func _on_boss_minion_spawn(pos: Vector2, minion_hp: int) -> void:
-	var block_size := Vector2(GameConstants.BLOCK_WIDTH - 4.0, GameConstants.BLOCK_HEIGHT - 4.0)
-	var minion: Block = preload("res://scenes/block.tscn").instantiate()
-	minion.position = pos
-	moving_blocks_layer.add_child(minion)
-	minion.configure(GameConstants.BLOCK_RED_ENEMY, minion_hp, minion_hp, block_size)
-	minion.activate_enemy_motion()
-
-
-func _trigger_boss_defeated() -> void:
-	if state == GameConstants.GameState.STAGE_CLEAR:
-		return
-	if _burst_destroy_timer > 0.0:
-		_update_group_kill(_burst_destroy_timer + 0.001)
-	state = GameConstants.GameState.STAGE_CLEAR
-	_clear_all_knives()
-	if not spawn_timer.is_stopped():
-		spawn_timer.stop()
-	player.scale = Vector2.ONE
-	hit_combo = 0
-	combo_timer = 0.0
-	item_orbs.clear()
-
-	# Boss rewards
-	knife_count += GameConstants.BOSS_DEFEAT_KNIFE_BONUS
-	hearts = Session.get_max_hearts()  # Full heal
-	score += 1000 * GameConstants.BOSS_DEFEAT_SCORE_MULT
-	Session.total_bosses_defeated += 1
-	Session.add_coins(500)
-
-	_flash_screen(Color(1.0, 1.0, 1.0, 1.0), 0.85, 0.35)
-	_freeze_frame(GameConstants.BOSS_DEFEAT_FREEZE)
-	_add_trauma(0.6)
-	_camera_punch(ZOOM_KICK_MAX)
-	Haptics.heavy()
-	AudioManager.play("stage_clear")
-	boss_defeated_signal.emit()
-	hud.show_toast("BOSS DOWN! +%d KNIVES" % GameConstants.BOSS_DEFEAT_KNIFE_BONUS, GameConstants.GLOW_REWARD)
-	_emit_ui_update()
-	_run_boss_defeat_sequence()
-
-
-func _run_boss_defeat_sequence() -> void:
-	await get_tree().create_timer(0.5, true, false, true).timeout
-
-	# Boss explosion VFX
-	if current_boss != null and is_instance_valid(current_boss):
-		var bpos := current_boss.position
-		for i in range(8):
-			var offset := Vector2(randf_range(-50.0, 50.0), randf_range(-40.0, 40.0))
-			_vfx_ring(bpos + offset, current_boss.boss_color, 0.4)
-			_vfx_sparks(bpos + offset, 8, current_boss.boss_color,
-				current_boss.boss_color.lerp(Color.WHITE, 0.5), 80.0, 180.0, 0.4)
-			_burst_feedback(bpos + offset, current_boss.boss_color, 16.0, 0.22)
-			# VX-03: boss explosions froth with big cyan bubbles.
-			_spawn_bubble_pop(bpos + offset, true)
-			AudioManager.play("block_destroy_pow")
-			await get_tree().create_timer(0.1, true, false, true).timeout
-
-	# Clear remaining minions
-	var remaining := _get_remaining_blocks_sorted()
-	for block in remaining:
-		if is_instance_valid(block) and not block.is_destroyed():
-			var bpos: Vector2 = block.global_position
-			_spawn_destroy_vfx(bpos, block.block_type)
-			_burst_feedback(bpos, Color(0.35, 1.0, 0.55, 0.8), 10.0, 0.18)
-			score += 50
-			block.queue_free()
-			AudioManager.play("block_destroy_normal")
-			_emit_ui_update()
-		await get_tree().create_timer(0.04, true, false, true).timeout
-
-	# Show stage clear overlay
-	var heart_bonus := hearts * GameConstants.HEART_BONUS_KNIVES
-	stage_cleared.emit(level + 1, heart_bonus)
-	knife_count += heart_bonus
-	_emit_ui_update()
-
-	await get_tree().create_timer(1.2, true, false, true).timeout
-	if state != GameConstants.GameState.STAGE_CLEAR:
-		return
-	_open_levelup()
-
-
-func _draw_item_orbs() -> void:
-	for orb in item_orbs:
-		var item_type: int = int(orb["type"])
-		var color: Color = GameConstants.ITEM_COLORS.get(item_type, Color.WHITE)
-		var pos := Vector2(float(orb["x"]), float(orb["y"]))
-		var pulse := sin(float(orb["pulse"]) * 8.0) * 0.25 + 1.0
-		var r := GameConstants.ITEM_ORB_RADIUS * pulse
-
-		# Outer glow
-		var glow_color := Color(color.r, color.g, color.b, 0.25)
-		draw_circle(pos, r + 4.0, glow_color)
-		# Core
-		draw_circle(pos, r, color)
-		# Inner highlight
-		draw_circle(pos, r * 0.4, Color(1.0, 1.0, 1.0, 0.55))
 
 
 # ─── Flash overlay ──────────────────────────────────────────────────────────
@@ -1951,244 +1599,6 @@ func _add_hitstop(duration: float) -> void:
 
 # ─── Typed VFX bursts ───────────────────────────────────────────────────────
 
-func _spawn_destroy_vfx(pos: Vector2, block_type: String) -> void:
-	match block_type:
-		GameConstants.BLOCK_NORMAL:
-			_vfx_sparks(pos, 10, Color(0.25, 0.72, 1.0), Color(0.75, 0.96, 1.0), 80.0, 160.0, 0.36)
-		GameConstants.BLOCK_POW:
-			_vfx_ring(pos, Color(1.0, 0.08, 1.0, 0.88), 0.46)
-			_vfx_ring(pos, Color(1.0, 1.0, 1.0, 0.52), 0.30)
-			_vfx_sparks(pos, 14, Color(1.0, 0.28, 1.0), Color(1.0, 0.88, 1.0), 100.0, 220.0, 0.40)
-		GameConstants.BLOCK_STAR:
-			_vfx_sparks(pos, 12, Color(1.0, 0.72, 0.0), Color(1.0, 0.98, 0.55), 60.0, 130.0, 0.50)
-			_vfx_starburst(pos, Color(1.0, 0.95, 0.42, 0.92), 0.38)
-		GameConstants.BLOCK_RED_ENEMY:
-			_vfx_ring(pos, Color(0.92, 0.12, 0.20, 0.72), 0.36)
-			_vfx_sparks(pos, 10, Color(0.92, 0.18, 0.18), Color(1.0, 0.68, 0.38), 90.0, 180.0, 0.38)
-
-
-func _spawn_hit_vfx(pos: Vector2, color: Color) -> void:
-	_vfx_sparks(pos, 4, color, color.lerp(Color.WHITE, 0.4), 36.0, 76.0, 0.18)
-
-
-# ─── VX-03: cyan bubble-pop on elite/boss kills (duckflock ph.4) ─────────────
-# Elite (RED_ENEMY) and boss deaths get a burst of buoyant cyan bubbles on top
-# of the regular destroy VFX, marking them as a tier above normal block kills.
-
-const BUBBLE_COLOR_CORE := Color(0.45, 0.93, 1.0)
-const BUBBLE_COLOR_EDGE := Color(0.78, 0.99, 1.0)
-
-
-func _spawn_bubble_pop(pos: Vector2, big: bool = false) -> void:
-	var count := 14 if big else 7
-	var base_speed := 95.0 if big else 62.0
-	var size_mult := 1.5 if big else 1.0
-	var buoyancy := 26.0 if big else 18.0
-	for i in range(count):
-		var angle := float(i) / float(count) * TAU + randf_range(-0.4, 0.4)
-		var speed := randf_range(base_speed * 0.35, base_speed)
-		vfx_particles.append({
-			"x": pos.x + randf_range(-4.0, 4.0),
-			"y": pos.y + randf_range(-4.0, 4.0),
-			"vx": cos(angle) * speed,
-			"vy": sin(angle) * speed - buoyancy,
-			"radius": randf_range(2.6, 6.4) * size_mult,
-			"color": BUBBLE_COLOR_CORE.lerp(BUBBLE_COLOR_EDGE, randf()),
-			"life": randf_range(0.30, 0.55),
-			"max_life": 0.55,
-			"shape": "bubble",
-		})
-	var ring_color := Color(BUBBLE_COLOR_CORE.r, BUBBLE_COLOR_CORE.g, BUBBLE_COLOR_CORE.b, 0.55)
-	_vfx_ring(pos, ring_color, 0.42 if big else 0.30)
-
-
-func _vfx_sparks(pos: Vector2, count: int, color_a: Color, color_b: Color,
-		speed_min: float, speed_max: float, life: float) -> void:
-	for i in range(count):
-		var angle := float(i) / float(count) * TAU + randf_range(-0.3, 0.3)
-		var speed := randf_range(speed_min, speed_max)
-		var c := color_a.lerp(color_b, randf())
-		vfx_particles.append({
-			"x": pos.x + randf_range(-3.0, 3.0),
-			"y": pos.y + randf_range(-3.0, 3.0),
-			"vx": cos(angle) * speed,
-			"vy": sin(angle) * speed,
-			"radius": randf_range(1.5, 3.5),
-			"color": c,
-			"life": life * randf_range(0.7, 1.0),
-			"max_life": life,
-			"shape": "circle",
-		})
-
-
-func _spawn_impact_sparks(pos: Vector2, dir: Vector2, color: Color) -> void:
-	# Short directional spark streaks fired in a tight cone away from the surface,
-	# so a non-destroying hit still reads as "struck from this direction".
-	var base := dir.angle()
-	var count := 3
-	for i in range(count):
-		var spread := randf_range(-0.5, 0.5)
-		var a := base + spread
-		var speed := randf_range(150.0, 260.0)
-		vfx_particles.append({
-			"x": pos.x,
-			"y": pos.y,
-			"vx": cos(a) * speed,
-			"vy": sin(a) * speed,
-			"radius": randf_range(5.0, 9.0),  # streak length
-			"color": color.lerp(Color.WHITE, 0.35),
-			"life": randf_range(0.12, 0.2),
-			"max_life": 0.2,
-			"shape": "streak",
-		})
-
-
-func _vfx_ring(pos: Vector2, color: Color, life: float) -> void:
-	vfx_particles.append({
-		"x": pos.x, "y": pos.y,
-		"vx": 0.0, "vy": 0.0,
-		"radius": 4.0,
-		"expand": 190.0,
-		"color": color,
-		"life": life,
-		"max_life": life,
-		"shape": "ring",
-	})
-
-
-func _vfx_starburst(pos: Vector2, color: Color, life: float) -> void:
-	vfx_particles.append({
-		"x": pos.x, "y": pos.y,
-		"vx": 0.0, "vy": 0.0,
-		"radius": 20.0,
-		"expand": 0.0,
-		"color": color,
-		"life": life,
-		"max_life": life,
-		"shape": "star",
-	})
-
-
-func _update_vfx_particles(delta: float) -> void:
-	for i in range(vfx_particles.size() - 1, -1, -1):
-		var p: Dictionary = vfx_particles[i]
-		p["life"] = float(p["life"]) - delta
-		if float(p["life"]) <= 0.0:
-			vfx_particles.remove_at(i)
-			continue
-		p["x"] = float(p["x"]) + float(p["vx"]) * delta
-		p["y"] = float(p["y"]) + float(p["vy"]) * delta
-		if p.get("shape") == "bubble":
-			# Buoyancy: bubbles drift upward against the friction below.
-			p["vy"] = float(p["vy"]) - 46.0 * delta
-		p["vx"] = float(p["vx"]) * 0.82
-		p["vy"] = float(p["vy"]) * 0.82
-		if p.get("shape") == "ring":
-			p["radius"] = float(p["radius"]) + float(p.get("expand", 0.0)) * delta
-		vfx_particles[i] = p
-
-
-func _draw_vfx_particles() -> void:
-	for p in vfx_particles:
-		var life := float(p["life"])
-		var max_life := float(p["max_life"])
-		var t := clampf(life / max_life, 0.0, 1.0)
-		var pos := Vector2(float(p["x"]), float(p["y"]))
-		var color: Color = p["color"]
-		color.a *= t
-		match p.get("shape", "circle"):
-			"circle":
-				draw_circle(pos, maxf(0.5, float(p["radius"]) * (0.55 + 0.45 * t)), color)
-			"ring":
-				var r := float(p["radius"])
-				if r > 0.5:
-					draw_arc(pos, r, 0.0, TAU, 24, color, maxf(1.0, 3.2 * t))
-			"star":
-				var sz := float(p["radius"]) * t
-				draw_line(pos - Vector2(sz, 0.0), pos + Vector2(sz, 0.0), color, 2.0)
-				draw_line(pos - Vector2(0.0, sz), pos + Vector2(0.0, sz), color, 2.0)
-				var d := sz * 0.68
-				draw_line(pos - Vector2(d, d), pos + Vector2(d, d), color, 1.5)
-				draw_line(pos + Vector2(-d, d), pos - Vector2(-d, d), color, 1.5)
-				continue
-			"streak":
-				var vel := Vector2(float(p["vx"]), float(p["vy"]))
-				var dir := vel.normalized() if vel.length_squared() > 0.001 else Vector2.RIGHT
-				var sl := float(p["radius"]) * (0.6 + 0.8 * t)
-				var tip := pos + dir * sl
-				draw_line(pos, tip, color, maxf(1.0, 2.6 * t))
-			"bubble":
-				# Thin shell that swells as it dies — reads as a pop, not a fade.
-				var br := float(p["radius"]) * (1.0 + (1.0 - t) * 0.45)
-				draw_arc(pos, br, 0.0, TAU, 14, color, 1.4)
-				var hl := color
-				hl.a = color.a * 0.9
-				draw_circle(pos + Vector2(-br * 0.35, -br * 0.35), maxf(0.6, br * 0.22), hl)
-
-
-# ─── Background particles ────────────────────────────────────────────────────
-
-const _BG_PARTICLE_MAX := 45
-const _BG_SPAWN_INTERVAL := 0.07
-
-
-func _bg_particle_color() -> Color:
-	match (level - 1) % 4:
-		0: return Color(0.0, 0.85, 1.0)
-		1: return Color(0.65, 0.25, 1.0)
-		2: return Color(1.0, 0.55, 0.15)
-		_: return Color(1.0, 0.25, 0.85)
-
-
-func _spawn_bg_particle() -> void:
-	if bg_particles.size() >= _BG_PARTICLE_MAX:
-		return
-	bg_particles.append({
-		"x": randf_range(0.0, GameConstants.CANVAS_WIDTH),
-		"y": randf_range(-30.0, GameConstants.TOP_BAR_HEIGHT),
-		"vx": randf_range(-6.0, 6.0),
-		"vy": randf_range(18.0, 52.0),
-		"radius": randf_range(0.8, 2.5),
-		"alpha": randf_range(0.05, 0.17),
-		"life": randf_range(7.0, 15.0),
-		"max_life": 15.0,
-		"color": _bg_particle_color(),
-	})
-
-
-func _update_bg_particles(delta: float) -> void:
-	_bg_spawn_acc += delta
-	while _bg_spawn_acc >= _BG_SPAWN_INTERVAL:
-		_bg_spawn_acc -= _BG_SPAWN_INTERVAL
-		_spawn_bg_particle()
-	for i in range(bg_particles.size() - 1, -1, -1):
-		var p: Dictionary = bg_particles[i]
-		p["y"] = float(p["y"]) + float(p["vy"]) * delta
-		p["x"] = float(p["x"]) + float(p["vx"]) * delta
-		p["life"] = float(p["life"]) - delta
-		if float(p["y"]) > GameConstants.CANVAS_HEIGHT + 10.0 or float(p["life"]) <= 0.0:
-			bg_particles.remove_at(i)
-		else:
-			bg_particles[i] = p
-
-
-func _draw_bg_particles() -> void:
-	for p in bg_particles:
-		var life := float(p["life"])
-		var max_life := float(p["max_life"])
-		var t := life / max_life
-		var alpha_scale: float
-		if t > 0.88:
-			alpha_scale = (1.0 - t) / 0.12
-		elif t < 0.18:
-			alpha_scale = t / 0.18
-		else:
-			alpha_scale = 1.0
-		var color: Color = p["color"]
-		color.a = float(p["alpha"]) * alpha_scale
-		draw_circle(Vector2(float(p["x"]), float(p["y"])), float(p["radius"]), color)
-
-
 # ─── Aim line helpers ────────────────────────────────────────────────────────
 
 func _ray_wall_hit(from: Vector2, dir: Vector2) -> Vector2:
@@ -2243,7 +1653,7 @@ func _get_knife_damage() -> int:
 
 
 func _pierce_active() -> bool:
-	return _has_active_item(GameConstants.ItemType.PIERCE) \
+	return _items.has_active(GameConstants.ItemType.PIERCE) \
 		or _has_run_buff(GameConstants.RUN_BUFF_PIERCE)
 
 
@@ -2362,91 +1772,6 @@ func _apply_levelup(option_key: String) -> void:
 	_emit_ui_update()
 
 
-# ─── Coin shards: every destroy is a loot moment (scatter → magnet → tick) ──
-
-func _spawn_coin_shards(at: Vector2, block_type: String) -> void:
-	var count := randi_range(GameConstants.COIN_SHARDS_MIN, GameConstants.COIN_SHARDS_MAX)
-	if block_type == GameConstants.BLOCK_RED_ENEMY or block_type == GameConstants.BLOCK_STAR:
-		count += 2  # richer drops from the dangerous/valuable blocks
-	for i in range(count):
-		var angle := randf() * TAU
-		var speed := randf_range(90.0, 220.0)
-		coin_shards.append({
-			"x": at.x,
-			"y": at.y,
-			"vx": cos(angle) * speed,
-			"vy": sin(angle) * speed - 40.0,  # slight upward pop
-			"age": 0.0,
-			"radius": randf_range(2.2, 3.4),
-			"spin": randf() * TAU,
-		})
-
-
-func _update_coin_shards(delta: float) -> void:
-	if coin_shards.is_empty():
-		if _coin_streak != 0:
-			_coin_streak = 0
-		return
-	var target := Vector2(paddle_x, paddle_y - GameConstants.PADDLE_Y_OFFSET * 0.5)
-	for i in range(coin_shards.size() - 1, -1, -1):
-		var s: Dictionary = coin_shards[i]
-		var age := float(s["age"]) + delta
-		s["age"] = age
-		var pos := Vector2(float(s["x"]), float(s["y"]))
-		var vel := Vector2(float(s["vx"]), float(s["vy"]))
-
-		if age < GameConstants.COIN_SCATTER_TIME:
-			vel *= pow(0.0025, delta)  # strong damping during the free scatter
-		else:
-			var dir := (target - pos)
-			var dist := dir.length()
-			if dist > 1.0:
-				dir /= dist
-			vel += dir * GameConstants.COIN_MAGNET_ACCEL * delta
-			if vel.length() > 760.0:
-				vel = vel.normalized() * 760.0
-
-		pos += vel * delta
-		s["x"] = pos.x
-		s["y"] = pos.y
-		s["vx"] = vel.x
-		s["vy"] = vel.y
-
-		var collected := pos.distance_to(target) <= GameConstants.COIN_COLLECT_DIST \
-			and age >= GameConstants.COIN_SCATTER_TIME
-		if collected or age > GameConstants.COIN_LIFETIME:
-			coin_shards.remove_at(i)
-			if collected:
-				_on_coin_collected(pos)
-			continue
-		coin_shards[i] = s
-
-
-func _on_coin_collected(at: Vector2) -> void:
-	_coin_streak += 1
-	# Rising tick pitch per pickup — the reference's gem-vacuum sparkle.
-	AudioManager.play("ui_click", 1.0 + 0.06 * float(mini(_coin_streak, 10)), -4.0)
-	_burst_feedback(at, GameConstants.GLOW_REWARD, 7.0, 0.10)
-	hud.punch_score()
-
-
-func _draw_coin_shards() -> void:
-	for s in coin_shards:
-		var pos := Vector2(float(s["x"]), float(s["y"]))
-		var r := float(s["radius"])
-		var spin := float(s["spin"]) + float(s["age"]) * 9.0
-		# Spinning diamond: width oscillates to fake a coin flip.
-		var w := absf(cos(spin)) * r + 0.6
-		var glow := Color(GameConstants.GLOW_REWARD.r, GameConstants.GLOW_REWARD.g, GameConstants.GLOW_REWARD.b, 0.22)
-		draw_circle(pos, r + 2.4, glow)
-		var pts := PackedVector2Array([
-			pos + Vector2(0.0, -r), pos + Vector2(w, 0.0),
-			pos + Vector2(0.0, r), pos + Vector2(-w, 0.0),
-		])
-		draw_colored_polygon(pts, GameConstants.GLOW_REWARD)
-		draw_circle(pos + Vector2(-w * 0.25, -r * 0.3), r * 0.3, Color(1.0, 1.0, 1.0, 0.85))
-
-
 # ─── Vignette + fireflies (reference night-stage ambience) ───────────────────
 
 func _create_vignette() -> void:
@@ -2476,57 +1801,3 @@ func _create_vignette() -> void:
 	rect.stretch_mode = TextureRect.STRETCH_SCALE
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vignette_layer.add_child(rect)
-
-
-const _FIREFLY_MAX := 12
-const _FIREFLY_SPAWN_INTERVAL := 0.9
-
-
-func _spawn_firefly() -> void:
-	if firefly_particles.size() >= _FIREFLY_MAX:
-		return
-	# Two mote hues like the reference night scene: cyan with a pink minority.
-	var color := Color(0.45, 1.0, 1.0) if randi() % 3 != 0 else Color(1.0, 0.62, 0.85)
-	firefly_particles.append({
-		"x": randf_range(10.0, GameConstants.CANVAS_WIDTH - 10.0),
-		"y": randf_range(GameConstants.CANVAS_HEIGHT * 0.35, GameConstants.CANVAS_HEIGHT + 10.0),
-		"vy": randf_range(-20.0, -9.0),
-		"phase": randf() * TAU,
-		"age": 0.0,
-		"life": randf_range(6.0, 11.0),
-		"radius": randf_range(1.0, 2.0),
-		"alpha": randf_range(0.10, 0.24),
-		"color": color,
-	})
-
-
-func _update_fireflies(delta: float) -> void:
-	_firefly_spawn_acc += delta
-	while _firefly_spawn_acc >= _FIREFLY_SPAWN_INTERVAL:
-		_firefly_spawn_acc -= _FIREFLY_SPAWN_INTERVAL
-		_spawn_firefly()
-	for i in range(firefly_particles.size() - 1, -1, -1):
-		var p: Dictionary = firefly_particles[i]
-		var age := float(p["age"]) + delta
-		p["age"] = age
-		p["y"] = float(p["y"]) + float(p["vy"]) * delta
-		p["x"] = float(p["x"]) + sin(age * 1.6 + float(p["phase"])) * 9.0 * delta
-		if age >= float(p["life"]) or float(p["y"]) < GameConstants.TOP_BAR_HEIGHT:
-			firefly_particles.remove_at(i)
-		else:
-			firefly_particles[i] = p
-
-
-func _draw_fireflies() -> void:
-	for p in firefly_particles:
-		var age := float(p["age"])
-		var life := float(p["life"])
-		var fade := clampf(minf(age / 1.2, (life - age) / 1.2), 0.0, 1.0)
-		var twinkle := 0.72 + 0.28 * sin(age * 4.5 + float(p["phase"]))
-		var color: Color = p["color"]
-		color.a = float(p["alpha"]) * fade * twinkle
-		var pos := Vector2(float(p["x"]), float(p["y"]))
-		var r := float(p["radius"])
-		var halo := Color(color.r, color.g, color.b, color.a * 0.35)
-		draw_circle(pos, r + 2.0, halo)
-		draw_circle(pos, r, color)
