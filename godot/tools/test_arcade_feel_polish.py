@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO = ROOT / "scripts" / "audio_manager.gd"
 GAME_ROOT = ROOT / "scripts" / "game_root.gd"
+VFX_SYSTEM = ROOT / "scripts" / "systems" / "vfx_system.gd"
 BLOCK = ROOT / "scripts" / "block.gd"
 HAPTICS = ROOT / "scripts" / "haptics.gd"
 PROJECT = ROOT / "project.godot"
@@ -29,6 +30,7 @@ def require(condition: bool, message: str) -> None:
 def main() -> None:
     audio = AUDIO.read_text(encoding="utf-8")
     game_root = GAME_ROOT.read_text(encoding="utf-8")
+    vfx_system = VFX_SYSTEM.read_text(encoding="utf-8")
     block = BLOCK.read_text(encoding="utf-8")
     project = PROJECT.read_text(encoding="utf-8")
     require(HAPTICS.exists(), "scripts/haptics.gd autoload must exist")
@@ -63,8 +65,8 @@ def main() -> None:
             "Gameplay collision must use the world-local AABB (debug draw may keep global)")
     require("_hit_block(block, impact_dir)" in game_root,
             "Collision must forward the impact direction into the hit")
-    require("func _spawn_impact_sparks" in game_root and '"streak"' in game_root,
-            "Hits need directional spark streaks")
+    require("func spawn_impact_sparks" in vfx_system and '"streak"' in vfx_system,
+            "Hits need directional spark streaks (moved to vfx_system.gd)")
 
     # ── 3. Screen shake trauma² + rotation/zoom kick ─────────────────────────
     require("var trauma" in game_root and "func _add_trauma" in game_root,

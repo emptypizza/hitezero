@@ -45,11 +45,11 @@ func _run() -> void:
 	if first_block != null:
 		first_block.hp = 1
 		game._destroy_block(first_block)
-	_check(game.coin_shards.size() >= GameConstants.COIN_SHARDS_MIN,
-		"destroy spawns >= %d coin shards (got %d)" % [GameConstants.COIN_SHARDS_MIN, game.coin_shards.size()])
+	_check(game._vfx.coin_shards.size() >= GameConstants.COIN_SHARDS_MIN,
+		"destroy spawns >= %d coin shards (got %d)" % [GameConstants.COIN_SHARDS_MIN, game._vfx.coin_shards.size()])
 	for i in range(80):  # 8 simulated seconds in 0.1 s steps — far past lifetime cap
-		game._update_coin_shards(0.1)
-	_check(game.coin_shards.is_empty(), "coin shards all collected/expired after magnet phase")
+		game._vfx.update_coins(0.1)
+	_check(game._vfx.coin_shards.is_empty(), "coin shards all collected/expired after magnet phase")
 
 	# ── Toast slide-in inside TOAST_IN_TIME (G1.3) ──────────────────────────
 	hud.show_toast("TEST TOAST", Color.WHITE)
@@ -94,7 +94,7 @@ func _run() -> void:
 	_check(blast_block != null, "stage has a live block for the blast check")
 	if blast_block != null:
 		blast_block.hp = 10
-		game._blast_aoe(blast_block.global_position, 1.0)
+		game._items.blast_aoe(blast_block.global_position, 1.0)
 		_check(blast_block.hp == 10 - game._get_knife_damage(),
 			"blast applies run-modified knife damage (hp 10 -> %d)" % blast_block.hp)
 	game.run_damage_bonus = 0
@@ -132,8 +132,8 @@ func _run() -> void:
 
 	# ── Ambience (G1.4) ─────────────────────────────────────────────────────
 	for i in range(40):
-		game._update_fireflies(0.1)
-	_check(game.firefly_particles.size() > 0, "fireflies populate the night stage")
+		game._vfx.update_fireflies(0.1)
+	_check(game._vfx.firefly_particles.size() > 0, "fireflies populate the night stage")
 
 	# Tear the scene down before quitting so tweens/timers don't leak at exit.
 	root.remove_child(game)

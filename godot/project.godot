@@ -24,6 +24,7 @@ config/icon="res://icon.svg"
 Session="*res://scripts/session.gd"
 AudioManager="*res://scripts/audio_manager.gd"
 Haptics="*res://scripts/haptics.gd"
+AdsManager="*res://scripts/ads_manager.gd"
 
 [display]
 

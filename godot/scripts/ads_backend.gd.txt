@@ -1,0 +1,119 @@
+extends Node
+## ads_backend.gd — v1.1 AdMob rewarded-ad backend.  ⚠ ACTIVATE IN v1.1 ONLY.
+##
+## WHY THIS IS A .txt:
+##   This file references AdMob addon symbols (the Admob node API + LoadAdRequest).
+##   If it existed as a .gd while the addon is NOT installed, GDScript would fail
+##   to parse it and the otherwise-clean v1.0 project would break. Shipping it as
+##   .txt keeps Godot from compiling it until you deliberately activate it.
+##
+## ACTIVATION (v1.1):
+##   1. Install godot-admob: https://github.com/godot-sdk-integrations/godot-admob
+##      and enable the Gradle (custom Android) build in Project > Export.
+##   2. Add an `Admob` node to your main scene; put it in group "admob"; set its
+##      rewarded ad-unit Debug + Real IDs in the inspector. Use Google TEST IDs
+##      while developing (see godot/docs/v1.1_ads_implementation.md).
+##   3. Rename this file:  ads_backend.gd.txt  →  ads_backend.gd
+##   4. Set AdsManager.ADS_ENABLED = true.
+##
+## Contract expected by AdsManager (called via .call(), names must match):
+##   • is_revive_ready() -> bool
+##   • show_revive(on_reward: Callable, on_finished: Callable) -> void
+##
+## API source (verified): https://godot-sdk-integrations.github.io/godot-admob/
+##   load_rewarded_ad(LoadAdRequest) → rewarded_ad_loaded → show_rewarded_ad(ad_id)
+##   → rewarded_ad_user_earned_reward (grant here) → rewarded_ad_dismissed_*.
+
+var _admob: Node = null
+var _ready_to_show := false
+var _showing := false
+var _earned := false
+var _loaded_ad_id := ""
+var _on_reward: Callable
+var _on_finished: Callable
+
+
+func _ready() -> void:
+	_admob = get_tree().get_first_node_in_group("admob")
+	if _admob == null:
+		push_warning("ads_backend: no Admob node in group 'admob'; revive disabled.")
+		return
+	# Signal names + arg counts per the godot-admob docs (api/signals).
+	_admob.initialization_completed.connect(_on_init_done)
+	_admob.rewarded_ad_loaded.connect(_on_loaded)
+	_admob.rewarded_ad_failed_to_load.connect(_on_failed_to_load)
+	_admob.rewarded_ad_user_earned_reward.connect(_on_earned_reward)
+	_admob.rewarded_ad_dismissed_full_screen_content.connect(_on_dismissed)
+	_admob.rewarded_ad_failed_to_show_full_screen_content.connect(_on_failed_to_show)
+	_admob.initialize()
+
+
+func _on_init_done(_status_data) -> void:
+	_load_next()
+
+
+func _load_next() -> void:
+	_ready_to_show = false
+	if _admob != null:
+		_admob.load_rewarded_ad(LoadAdRequest.new())
+
+
+# rewarded_ad_loaded(ad_info: AdInfo, response_info: ResponseInfo)
+func _on_loaded(ad_info, _response_info) -> void:
+	# NOTE: confirm the AdInfo id field name against your installed addon version
+	# (the show_*() methods take the ad_id returned here).
+	_loaded_ad_id = ad_info.ad_id
+	_ready_to_show = true
+
+
+# rewarded_ad_failed_to_load(ad_info: AdInfo, error_data: LoadAdError)
+func _on_failed_to_load(_ad_info, _error_data) -> void:
+	_ready_to_show = false
+	# Light retry so a revive is ready for the next game over.
+	await get_tree().create_timer(30.0).timeout
+	_load_next()
+
+
+func is_revive_ready() -> bool:
+	return _ready_to_show and not _showing and _admob != null
+
+
+func show_revive(on_reward: Callable, on_finished: Callable) -> void:
+	if not is_revive_ready():
+		if on_finished.is_valid():
+			on_finished.call(false)
+		return
+	_on_reward = on_reward
+	_on_finished = on_finished
+	_showing = true
+	_ready_to_show = false
+	_earned = false
+	_admob.show_rewarded_ad(_loaded_ad_id)
+
+
+# rewarded_ad_user_earned_reward(ad_info: AdInfo, reward_data: RewardItem)
+# Docs: always grant the reward when this fires, regardless of dismissal.
+func _on_earned_reward(_ad_info, _reward_data) -> void:
+	_earned = true
+	if _on_reward.is_valid():
+		_on_reward.call()
+
+
+# rewarded_ad_dismissed_full_screen_content(ad_info: AdInfo)
+func _on_dismissed(_ad_info) -> void:
+	_finish(_earned)
+
+
+# rewarded_ad_failed_to_show_full_screen_content(ad_info: AdInfo, error_data: AdError)
+func _on_failed_to_show(_ad_info, _error_data) -> void:
+	_finish(false)
+
+
+func _finish(granted: bool) -> void:
+	_showing = false
+	var cb := _on_finished
+	_on_reward = Callable()
+	_on_finished = Callable()
+	if cb.is_valid():
+		cb.call(granted)
+	_load_next()  # preload the next revive
