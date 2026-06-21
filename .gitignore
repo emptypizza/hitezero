@@ -46,3 +46,6 @@ dist/netlify-hitezero-*.zip
 
 # Generated Android gradle build template (regenerated from android_source.zip)
 godot/android/
+
+# Local Netlify folder
+.netlify

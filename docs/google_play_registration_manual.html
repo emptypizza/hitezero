@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiteZero · 구글 플레이 등록 매뉴얼 (앱 출시 A→Z)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3242;
+    --txt:#e6edf3; --muted:#9aa7b8; --accent:#22c55e; --accent2:#3b82f6;
+    --warn:#f59e0b; --danger:#ef4444; --code:#0b0f16; --purple:#a855f7;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:linear-gradient(180deg,#0a0e14,#0d1117 240px);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",Roboto,sans-serif;
+    line-height:1.65; font-size:15.5px;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:0 22px 120px}
+  header.hero{
+    padding:54px 22px 38px; text-align:center;
+    border-bottom:1px solid var(--line);
+    background:radial-gradient(900px 300px at 50% -40px, rgba(59,130,246,.14), transparent);
+  }
+  header.hero .badge{
+    display:inline-block; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent2); border:1px solid rgba(59,130,246,.4); border-radius:999px;
+    padding:5px 14px; margin-bottom:18px; background:rgba(59,130,246,.07);
+  }
+  header.hero h1{font-size:30px; margin:0 0 8px; font-weight:800; letter-spacing:-.02em}
+  header.hero p{color:var(--muted); margin:0; max-width:660px; margin-inline:auto}
+  .updated{margin-top:14px; font-size:12.5px; color:var(--muted)}
+
+  .factbar{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:30px 0 6px;
+  }
+  .factbar .f{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px}
+  .factbar .f .k{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+  .factbar .f .v{font-size:14px; font-weight:700; margin-top:3px; word-break:break-all}
+  .factbar .f .v code{color:#8fe3a8; font-size:13px}
+
+  nav.toc{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 24px; margin:28px 0 34px; columns:2; column-gap:34px;
+  }
+  nav.toc h2{margin:0 0 12px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); column-span:all}
+  nav.toc a{display:block; color:var(--txt); text-decoration:none; padding:5px 0; font-size:14.5px; border-bottom:1px dashed transparent}
+  nav.toc a:hover{color:var(--accent2); border-bottom-color:var(--line)}
+  nav.toc a .n{color:var(--accent); font-variant-numeric:tabular-nums; margin-right:8px; font-weight:700}
+
+  section{margin:46px 0; scroll-margin-top:20px}
+  section > h2{
+    font-size:23px; font-weight:800; letter-spacing:-.01em; margin:0 0 6px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  section > h2 .num{
+    display:inline-grid; place-items:center; width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(135deg,var(--accent2),#6366f1); color:#fff; font-size:15px; margin-right:11px; vertical-align:2px;
+  }
+  .lead{color:var(--muted); margin:.2em 0 1.4em}
+  h3{font-size:17px; margin:26px 0 8px; font-weight:700}
+  h4{font-size:15px; margin:18px 0 6px; font-weight:700; color:#dce6f5}
+
+  .steps{counter-reset:step; list-style:none; padding:0; margin:0}
+  .steps > li{
+    position:relative; counter-increment:step;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px 16px 58px; margin:12px 0;
+  }
+  .steps > li::before{
+    content:counter(step); position:absolute; left:16px; top:15px;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2); border:1px solid var(--line);
+    color:var(--accent2); font-weight:800; display:grid; place-items:center; font-size:14px;
+  }
+  .steps > li b{color:#fff}
+  .steps ul{margin:8px 0 2px; padding-left:18px} .steps ul li{margin:3px 0}
+
+  code, kbd{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:13px}
+  code.inline{background:var(--code); border:1px solid var(--line); padding:2px 6px; border-radius:6px; color:#8fe3a8; white-space:nowrap}
+  pre{
+    background:var(--code); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; overflow:auto; font-size:13px; position:relative; margin:12px 0;
+  }
+  pre code{color:#cfe3ff; white-space:pre}
+  .filehint{font-size:12.5px; color:var(--muted); margin:0 0 4px}
+  .filehint code{color:var(--warn)}
+  .copybox{position:relative}
+  .copybox .label{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:14px 0 4px}
+
+  .callout{border-radius:11px; padding:14px 16px 14px 48px; margin:16px 0; position:relative; border:1px solid; font-size:14.5px}
+  .callout::before{position:absolute; left:15px; top:13px; font-size:18px}
+  .callout.warn{background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.4)} .callout.warn::before{content:"⚠️"}
+  .callout.danger{background:rgba(239,68,68,.09); border-color:rgba(239,68,68,.45)} .callout.danger::before{content:"🚫"}
+  .callout.tip{background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.4)} .callout.tip::before{content:"✅"}
+  .callout.info{background:rgba(59,130,246,.08); border-color:rgba(59,130,246,.4)} .callout.info::before{content:"ℹ️"}
+  .callout b{color:#fff}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+  th{background:var(--panel2); color:var(--muted); font-weight:600; font-size:13px}
+  td code{color:#8fe3a8}
+  td b{color:#fff}
+
+  .pill{display:inline-block; font-size:11.5px; padding:2px 9px; border-radius:999px; font-weight:700; letter-spacing:.02em}
+  .pill.yes{background:rgba(34,197,94,.15); color:#7ee2a0; border:1px solid rgba(34,197,94,.4)}
+  .pill.no{background:rgba(239,68,68,.13); color:#ff9ea0; border:1px solid rgba(239,68,68,.4)}
+  .pill.pick{background:rgba(245,158,11,.14); color:#ffcf7a; border:1px solid rgba(245,158,11,.4)}
+
+  .check{list-style:none; padding:0; margin:0}
+  .check li{padding:8px 0 8px 30px; position:relative; border-bottom:1px solid var(--line)}
+  .check li::before{content:"☐"; position:absolute; left:4px; top:7px; color:var(--accent); font-size:17px}
+  .check li:last-child{border-bottom:none}
+
+  a.link{color:var(--accent2); text-decoration:none; border-bottom:1px solid rgba(59,130,246,.4)}
+  a.link:hover{color:#9cc4ff}
+  footer{margin-top:60px; padding-top:24px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; text-align:center}
+
+  .legend{font-size:13px; color:var(--muted); margin:6px 0 0}
+  .legend .pill{margin:0 4px}
+
+  @media print{
+    body{background:#fff; color:#111; font-size:11pt}
+    header.hero,nav.toc,.callout{break-inside:avoid}
+    pre,code.inline{background:#f3f3f3; color:#111; border-color:#ccc}
+    section{break-inside:auto}
+    .factbar{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:680px){ nav.toc{columns:1} section>h2{font-size:20px} .factbar{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="badge">HiteZero · Google Play 등록 매뉴얼</div>
+  <h1>구글 플레이에 앱 올리기 — 처음부터 출시까지</h1>
+  <p>개발자 계정 만들기부터 <b>서명된 AAB 업로드 · 스토어 등록정보 · 앱 콘텐츠 선언 · 출시 트랙 승격</b>까지,
+  HiteZero를 Google Play에 등록하는 모든 단계를 <b>실제 값과 복붙 텍스트</b>로 정리했습니다.
+  콘솔 화면에서 그대로 따라 입력만 하면 됩니다.</p>
+  <div class="updated">작성일 2026-06-22 · 대상 패키지 <code class="inline">com.gghf.hitezero</code> · 버전 <code class="inline">1.0.0 (code 1)</code> · 무료 / 광고·결제·데이터수집 없음(v1.0)</div>
+</header>
+
+<div class="wrap">
+
+<div class="factbar">
+  <div class="f"><div class="k">패키지명</div><div class="v"><code>com.gghf.hitezero</code></div></div>
+  <div class="f"><div class="k">버전</div><div class="v">1.0.0 · <code>code 1</code></div></div>
+  <div class="f"><div class="k">업로드 형식</div><div class="v">서명된 <code>.aab</code></div></div>
+  <div class="f"><div class="k">카테고리</div><div class="v">게임 · 아케이드</div></div>
+</div>
+<p class="legend">표기: <span class="pill yes">예</span> 그대로 선택 · <span class="pill no">아니요</span> 그대로 선택 · <span class="pill pick">선택</span> 본인이 최종 확인할 칸</p>
+
+<nav class="toc">
+  <h2>목차</h2>
+  <a href="#overview"><span class="n">0</span>큰 그림 · 준비물</a>
+  <a href="#aab"><span class="n">1</span>서명된 AAB 확보</a>
+  <a href="#account"><span class="n">2</span>개발자 계정 + 앱 만들기</a>
+  <a href="#listing"><span class="n">3</span>스토어 등록정보 (복붙)</a>
+  <a href="#assets"><span class="n">4</span>그래픽 자산 업로드</a>
+  <a href="#appcontent"><span class="n">5</span>앱 콘텐츠 선언 (전체 답안)</a>
+  <a href="#rating"><span class="n">6</span>콘텐츠 등급 설문 (IARC)</a>
+  <a href="#datasafety"><span class="n">7</span>데이터 보안 양식</a>
+  <a href="#release"><span class="n">8</span>출시 트랙 · 앱 서명</a>
+  <a href="#update"><span class="n">9</span>업데이트 올리는 법</a>
+  <a href="#checklist"><span class="n">10</span>제출 전 최종 체크</a>
+  <a href="#troubleshoot"><span class="n">11</span>자주 막히는 곳</a>
+  <a href="#dont"><span class="n">12</span>절대 하면 안 되는 것</a>
+</nav>
+
+<!-- 0 -->
+<section id="overview">
+  <h2><span class="num">0</span>큰 그림 · 준비물</h2>
+  <p class="lead">Play 스토어는 <b>웹 빌드(.zip)를 받지 않습니다.</b> 오직 <b>서명된 Android App Bundle(.aab)</b>만 받습니다. 시작 전 아래 5가지가 손에 있어야 합니다.</p>
+
+  <table>
+    <tr><th>준비물</th><th>HiteZero 현재 상태</th><th>위치 / 값</th></tr>
+    <tr><td>① 개발자 계정 ($25 1회)</td><td><span class="pill pick">확인</span> 가입·신원확인 완료 여부</td><td><a class="link" href="https://play.google.com/console" target="_blank">play.google.com/console</a></td></tr>
+    <tr><td>② 서명된 AAB</td><td>로컬에 존재 · CI로도 생성 가능</td><td><code>build/android/hitezero.aab</code></td></tr>
+    <tr><td>③ 그래픽 에셋</td><td>아이콘·피처·스크린샷 4장 준비됨</td><td><code>store_assets/</code></td></tr>
+    <tr><td>④ 개인정보처리방침 URL</td><td>라이브</td><td><code>https://hitezero.netlify.app/privacy</code></td></tr>
+    <tr><td>⑤ 등록정보 텍스트</td><td>EN/KR 확정안 보유</td><td>본 문서 3장</td></tr>
+  </table>
+
+  <h3>꼭 알아야 할 3가지 개념</h3>
+  <ul>
+    <li><b>AAB(App Bundle)</b> — Play에 올리는 패키징 형식. APK가 아니라 <code class="inline">.aab</code>여야 합니다. 우리 <code class="inline">Android</code> 프리셋은 이미 AAB(<code class="inline">export_format=1</code>)로 설정돼 있습니다.</li>
+    <li><b>업로드 키(upload key)</b> — 내가 보관하는 키스토어로 AAB에 서명합니다. HiteZero는 <code class="inline">hitezero_upload.jks</code>(별칭 <code class="inline">upload</code>)를 사용하며, GitHub CI 시크릿에도 등록돼 있습니다.</li>
+    <li><b>Play 앱 서명(Play App Signing)</b> — 첫 업로드 시 <b>켜기</b>. 구글이 진짜 배포 키를 보관하므로, 업로드 키를 잃어도 재설정으로 복구할 수 있습니다.</li>
+  </ul>
+
+  <div class="callout info">
+    이 문서는 <b>v1.0 = 광고 0 · 인앱결제 0 · 데이터 수집 0</b>의 "깨끗한" 출시 프로필을 기준으로 합니다. 이 프로필은 가장 단순하고 정책상 방어가 쉽습니다.
+    나중에 <b>광고로 수익화</b>하려면 같은 <code class="inline">docs/</code> 폴더의 <a class="link" href="./google_admin_manual.html">google_admin_manual.html</a>(AdMob·AdSense 가이드)을 따르고, 데이터 보안·광고 선언을 모두 갱신해야 합니다.
+  </div>
+</section>
+
+<!-- 1 -->
+<section id="aab">
+  <h2><span class="num">1</span>서명된 AAB 확보 — 어떤 빌드를 올릴까</h2>
+  <p class="lead">Play에 올릴 단 하나의 파일입니다. <b>패키지가 <code>com.gghf.hitezero</code>(adtest 아님)이고 릴리스 서명된 AAB</b>여야 합니다.</p>
+
+  <h3>방법 A — GitHub Actions CI (권장 · 서명 일관성)</h3>
+  <ol class="steps">
+    <li><b>워크플로 실행.</b> 버전 태그를 푸시하면 자동 빌드됩니다:
+      <pre><code>git tag v1.0.0
+git push origin v1.0.0</code></pre>
+      또는 GitHub <b>Actions 탭 → "Android (AAB + APK)" → Run workflow</b> 수동 실행.</li>
+    <li><b>아티팩트 다운로드.</b> 실행 완료 후 <b>Artifacts → <code class="inline">hitezero-android</code></b> 에서 <code class="inline">hitezero.aab</code> 다운로드. 서명은 리포 시크릿(<code class="inline">ANDROID_KEYSTORE_BASE64</code> / <code class="inline">ANDROID_KEY_ALIAS=upload</code> / <code class="inline">ANDROID_KEYSTORE_PASSWORD</code>)으로 자동 처리됩니다.</li>
+  </ol>
+
+  <h3>방법 B — 로컬 빌드 (본인 머신, Android SDK 필요)</h3>
+  <pre><code>cd godot
+export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$HOME/keystores/hitezero_upload.jks"
+export GODOT_ANDROID_KEYSTORE_RELEASE_USER="upload"
+export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="••••••"   # 셸 히스토리 주의
+
+godot --headless --path . --export-release "Android" ../build/android/hitezero.aab</code></pre>
+  <p class="filehint">사전 1회: Godot 에디터에서 <code>Project → Install Android Build Template…</code> + Editor Settings에 Android SDK / JDK 17 경로 지정.</p>
+
+  <div class="callout danger">
+    <b>ad-test 빌드를 올리지 마세요.</b> 현재 작업 브랜치(<code class="inline">neon-style-7cc31</code>)에는 AdMob 애드온이 들어와 있습니다.
+    프리셋 <b>"Android Test (Ads)"</b>는 일부러 다른 패키지 <code class="inline">com.gghf.hitezero.adtest</code> + APK로 분리돼 있으니,
+    Play 출시용으로는 <b>반드시 <code>"Android"</code> 프리셋(<code>com.gghf.hitezero</code>, AAB)</b>만 사용하세요.
+    가장 안전한 길은 <b>방법 A(CI)로 깨끗하게 서명된 AAB</b>를 받는 것입니다.
+  </div>
+  <div class="callout warn">
+    <b>업로드 형식 확인.</b> 받은 파일이 <code class="inline">.apk</code>가 아니라 <code class="inline">.aab</code>인지, 그리고 <b>디버그 서명이 아닌 릴리스 서명</b>인지 확인하세요. (에디터 수동 export 시 "Export With Debug" 체크는 반드시 <b>해제</b>.)
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="account">
+  <h2><span class="num">2</span>개발자 계정 + 앱 만들기</h2>
+  <ol class="steps">
+    <li><b>개발자 계정 등록.</b> <a class="link" href="https://play.google.com/console" target="_blank">play.google.com/console</a> → 최초 1회 <b>$25</b> 결제 + 신원확인. (개인/사업자 선택. 신원확인 승인에 시간이 걸릴 수 있으니 가장 먼저 처리.)</li>
+    <li><b>앱 만들기.</b> 콘솔 → <b>앱 만들기(Create app)</b>:
+      <ul>
+        <li>앱 이름: <b>HiteZero</b></li>
+        <li>기본 언어: <b>영어(en-US)</b> <span class="pill pick">확정</span> — 글로벌 노출 최대화. 출시 후 ko-KR 추가.</li>
+        <li>앱 또는 게임: <b>게임(Game)</b></li>
+        <li>무료 또는 유료: <b>무료(Free)</b></li>
+        <li>선언 체크박스(개발자 프로그램 정책 / 미국 수출법) 동의</li>
+      </ul>
+    </li>
+    <li><b>대시보드 따라가기.</b> 앱 생성 후 콘솔이 "앱 설정 → 스토어 등록정보 → 출시" 순서의 체크리스트를 보여줍니다. 본 문서 3~8장이 그 순서를 그대로 따릅니다.</li>
+  </ol>
+  <div class="callout info">한국어 스토어 노출을 원하면, 출시 후 <b>스토어 등록정보 → 언어 추가 → 한국어(ko-KR)</b>로 3장의 KR 텍스트를 넣으면 됩니다. 영어 기본 + 한국어 추가가 노출/국내 커버 모두 잡는 조합입니다.</div>
+</section>
+
+<!-- 3 -->
+<section id="listing">
+  <h2><span class="num">3</span>스토어 등록정보 — 복붙용 확정 텍스트</h2>
+  <p class="lead"><b>앱 → 스토어 등록정보 → 기본 스토어 등록정보</b>에 아래를 그대로 붙여넣습니다. (Play 한도: 제목 ≤30 · 짧은 설명 ≤80 · 긴 설명 ≤4000자)</p>
+
+  <h3>앱 이름 (≤30자)</h3>
+  <table>
+    <tr><th>옵션</th><th>텍스트</th><th>비고</th></tr>
+    <tr><td>현행</td><td><code>HiteZero</code></td><td>브랜드만 — 키워드 0</td></tr>
+    <tr><td><b>권장 ASO</b></td><td><code>HiteZero: Neon Knife Arcade</code> (27)</td><td>neon·knife·arcade 키워드 포착 <span class="pill pick">선택</span></td></tr>
+    <tr><td>대안</td><td><code>HiteZero: Knife Brick Breaker</code> (29)</td><td>"brick breaker" 고볼륨 포착</td></tr>
+  </table>
+
+  <h3>짧은 설명 (≤80자)</h3>
+  <div class="copybox">
+    <div class="label">EN (en-US)</div>
+    <pre><code>Throw knives, ricochet off walls, smash neon bricks. One-hand arcade fun!</code></pre>
+    <div class="label">KR (ko-KR)</div>
+    <pre><code>칼을 던지고 튕겨 네온 블록을 부숴라. 한 손으로 즐기는 네온 아케이드.</code></pre>
+  </div>
+
+  <h3>긴 설명 (≤4000자)</h3>
+  <div class="copybox">
+    <div class="label">EN (en-US)</div>
+    <pre><code>Throw knives. Bank them off the walls. Smash every neon brick on the board. HiteZero is a fast, free, one-thumb NEON KNIFE-THROWING ARCADE game — a fresh twist on the classic brick breaker, built for quick sessions and high scores.
+
+Just drag to aim and release to fire. Your knife ricochets off the walls and the tray, so the best players don't throw straight — they bank shots, chain ricochets, and wipe out half the board in a single flick. Simple to learn, satisfying to master.
+
+HOW TO PLAY
+• Drag to aim, release to throw — pure one-hand, one-thumb control
+• Ricochet knives off walls for trick shots and bigger combos
+• Smash all the STAR blocks to clear the stage and advance
+• Trigger POW blocks for a radial knife burst that shreds the board
+• Stop the RED ENEMY blocks before they reach the bottom — let one through and you lose a heart
+• Survive on three hearts and chase your best score
+
+FEATURES
+• Neon brick-breaker arcade action with crisp, glowing visuals
+• Ricochet physics that reward smart aim and bank shots
+• Escalating levels — more bricks, faster enemies, tougher boards
+• Epic BOSS fights that test everything you've learned
+• A combo system that rewards multi-block clears and ricochet chains
+• Punchy hit feedback, screen-shake, and arcade sound
+• Endless replay value — beat your high score, climb the levels
+
+PLAY ANYWHERE, ANYTIME
+• 100% FREE — no in-app purchases, ever
+• NO ADS — zero interruptions, just gameplay
+• Fully OFFLINE — play on the bus, on a plane, anywhere, no Wi-Fi needed
+• No account, no sign-up, no data collected — open and play in seconds
+
+If you love brick breaker, block-smashing, knife-throwing, or fast neon arcade games, HiteZero is built for you. One thumb. Infinite bank shots. How long can you survive?
+
+Download HiteZero free and start smashing neon bricks now!</code></pre>
+    <div class="label">KR (ko-KR)</div>
+    <pre><code>HiteZero는 칼을 던지는 빠른 한 손 네온 아케이드 게임입니다.
+
+드래그로 조준하고 놓아서 발사하세요. 벽에 튕기는 칼로 보드의 블록을 모두
+부숩니다. STAR 블록을 모두 깨면 다음 스테이지로, POW 블록은 방사형 칼 폭발을
+터뜨립니다. 아래로 떨어지는 RED ENEMY가 바닥에 닿으면 하트가 하나 줄어듭니다.
+
+• 순수 실력 — 타이머도, 결제 유도도 없음
+• 엄지 하나로 — 조준, 놓기, 파괴
+• 벽·트레이 튕김을 이용한 뱅크샷
+• 갈수록 늘어나는 블록과 강해지는 적
+• 선명한 네온 비주얼과 타격감
+• 완전 오프라인 — 광고·계정·데이터 수집 없음
+
+하트 3개로 얼마나 버틸 수 있나요? 최고 점수에 도전하세요.
+
+지금 무료로 다운로드하고 네온 블록을 부숴보세요!</code></pre>
+  </div>
+
+  <h3>그 외 등록정보 필드</h3>
+  <table>
+    <tr><td style="width:40%"><b>앱 카테고리</b></td><td>게임 → <b>아케이드(Arcade)</b> <span class="pill pick">확정</span></td></tr>
+    <tr><td><b>태그</b></td><td>arcade / brick breaker / casual 중 관련 항목 선택(선택 사항)</td></tr>
+    <tr><td><b>연락처 이메일</b></td><td><code>team.gghf@gmail.com</code></td></tr>
+    <tr><td><b>개인정보처리방침 URL</b></td><td><code>https://hitezero.netlify.app/privacy</code></td></tr>
+    <tr><td><b>외부 마케팅</b></td><td>원치 않으면 "내 앱을 Google 외부에서 광고하지 않음" 선택(선택 사항)</td></tr>
+  </table>
+</section>
+
+<!-- 4 -->
+<section id="assets">
+  <h2><span class="num">4</span>그래픽 자산 업로드</h2>
+  <p class="lead">모든 에셋이 <code class="inline">store_assets/</code> 에 준비돼 있습니다. 스토어 등록정보의 "그래픽" 섹션에 업로드하세요.</p>
+  <table>
+    <tr><th>Play 항목</th><th>요구 규격</th><th>파일</th></tr>
+    <tr><td><b>앱 아이콘</b></td><td>512×512 PNG (32비트, ≤1MB)</td><td><code>store_assets/play_icon_512.png</code></td></tr>
+    <tr><td><b>그래픽 피처</b></td><td>1024×500 PNG/JPG</td><td><code>store_assets/play_feature_1024x500.png</code></td></tr>
+    <tr><td><b>휴대전화 스크린샷</b> (최소 2, 최대 8)</td><td>16:9 또는 9:16, 1080×1890</td><td><code>play_screen_1~4.png</code> (캡션 번인판: <code>captioned/play_screen_*_cap.png</code>)</td></tr>
+    <tr><td>태블릿 스크린샷 (선택)</td><td>7"/10" — 선택 사항</td><td>미준비 — 생략 가능</td></tr>
+    <tr><td>프로모 영상 (선택)</td><td>YouTube URL, 16:9, 수익화 OFF</td><td>추후(ASO 키트 §7 참고)</td></tr>
+  </table>
+  <div class="callout tip">캡션이 번인된 <code class="inline">store_assets/captioned/</code> 4장을 쓰면 썸네일에서 1초 안에 핵심이 읽혀 전환율이 올라갑니다. 스크린샷은 4장 모두 올리는 것을 권장(많을수록 좋음).</div>
+</section>
+
+<!-- 5 -->
+<section id="appcontent">
+  <h2><span class="num">5</span>앱 콘텐츠 선언 — 항목별 답안 전체</h2>
+  <p class="lead"><b>앱 → 정책 및 프로그램 → 앱 콘텐츠</b>의 각 카드를 아래대로 작성합니다. <b>v1.0(광고·결제·데이터수집 0)</b> 기준의 정직한 답안입니다.</p>
+
+  <table>
+    <tr><th>항목</th><th>답안</th><th>근거</th></tr>
+    <tr><td><b>개인정보처리방침</b></td><td><code>https://hitezero.netlify.app/privacy</code></td><td>라이브 페이지</td></tr>
+    <tr><td><b>앱 액세스 권한</b></td><td><span class="pill yes">모든 기능 제한 없이 제공</span></td><td>로그인·코드·멤버십 불필요. 설치 즉시 전 기능 접근. 심사팀 제공 자격증명 없음.</td></tr>
+    <tr><td><b>광고</b></td><td>앱에 광고 포함? → <span class="pill no">아니요</span></td><td>광고/분석/추적 SDK 미포함, 완전 오프라인.</td></tr>
+    <tr><td><b>콘텐츠 등급</b></td><td>IARC 설문 작성 → <b>6장 참고</b></td><td>판타지/만화 폭력=예, 나머지=아니요</td></tr>
+    <tr><td><b>타깃층 및 콘텐츠</b></td><td>대상 연령: <span class="pill pick">13세 이상(13+)만</span></td><td>만 13세 미만을 하나라도 포함하면 가족 정책(Designed for Families)이 발동 → 추가 요건·심사. 13+만 선택해 가족 정책 비대상으로 단순화.</td></tr>
+    <tr><td>↳ 아동을 <b>주 대상</b>으로 설계?</td><td><span class="pill no">아니요</span></td><td>주 대상은 13세 이상. (단, '아동에게도 어필 가능' 항목이 별도로 뜨면 사실대로 표기 — 아래 주의.)</td></tr>
+    <tr><td><b>데이터 보안</b></td><td>데이터 수집/공유? → <span class="pill no">아니요</span> → <b>7장 참고</b></td><td>저장은 기기 로컬 <code>user://save.cfg</code>만, 외부 전송 없음.</td></tr>
+    <tr><td><b>정부 앱</b></td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td><b>금융 기능</b></td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td><b>건강 앱</b></td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td><b>뉴스 앱</b></td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td><b>코로나19 추적/접촉</b></td><td><span class="pill no">아니요</span></td><td>온라인 기능 없음</td></tr>
+    <tr><td><b>인앱결제</b></td><td><span class="pill no">아니요</span></td><td>앱 무료, IAP 없음</td></tr>
+    <tr><td><b>미국 수출법 준수</b></td><td><span class="pill yes">동의(체크)</span></td><td>자체 암호화 없음, 표준 OS 암호화만 → 표준 배포 대상</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <b>'아동 어필' 정직성 메모.</b> HiteZero의 아트(치비 애니메 메이드, 밝은 네온 블록·별·POW·만화 블롭)는 어린 사용자에게 <b>부수적으로 어필할 수 있음</b>을 인정합니다.
+    Play가 '아동에게도 어필 가능한가'를 <b>별도로</b> 물으면 단순 부정하지 말고 <b>사실대로</b> 표기하세요. 단, '아동을 <b>주 대상</b>으로 하는가'에는 정직하게 <b>아니요</b>(주 대상 13+)로 답합니다. 과소·왜곡 신고는 정책 위반·앱 제거 사유입니다.
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="rating">
+  <h2><span class="num">6</span>콘텐츠 등급 설문 (IARC) — 그대로 답</h2>
+  <p class="lead"><b>앱 콘텐츠 → 콘텐츠 등급</b>에서 설문을 시작합니다. 이메일 <code class="inline">team.gghf@gmail.com</code>, 카테고리 <b>게임 / 기타(아케이드)</b>.</p>
+  <table>
+    <tr><th>설문 항목</th><th>답</th><th>근거</th></tr>
+    <tr><td>사실적/노골적 폭력</td><td><span class="pill no">아니요</span></td><td>추상 네온 블록·만화 블롭만 대상</td></tr>
+    <tr><td>유혈 / 피</td><td><span class="pill no">아니요</span></td><td>없음</td></tr>
+    <tr><td>판타지/만화적 폭력 요소</td><td><span class="pill yes">예</span></td><td><b>정직하게 예.</b> 칼 투척 액션(추상 블록·만화 블롭 대상). 절대 '아니요'로 낮추지 말 것 — 과소신고는 등급 취소·앱 제거 사유.</td></tr>
+    <tr><td>성적 콘텐츠</td><td><span class="pill no">아니요</span></td><td>메이드 캐릭터는 풀커버 의상(드레스·앞치마·무릎길이 치마·스타킹). 노출/암시 프레이밍 없음.</td></tr>
+    <tr><td>욕설 / 저속어</td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td>약물 / 알코올 / 담배</td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td>도박 (실제/모의)</td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td>공포 / 무서움</td><td><span class="pill no">아니요</span></td><td></td></tr>
+    <tr><td>사용자 간 상호작용 / 위치공유 / UGC</td><td><span class="pill no">아니요</span></td><td>온라인 기능 없음</td></tr>
+  </table>
+  <div class="callout info">
+    예상 결과: <b>ESRB Everyone / PEGI 3~7 / USK 0~6 / 전체이용가</b>. <span class="pill pick">확정값은 설문 제출 후 표시.</span>
+    참고로 이 IARC 자동 등급(3+)과 5장의 'Play 타깃 연령 13+'는 <b>서로 다른 제도</b>(콘텐츠 등급 vs. 타깃층 자가선택)이며 값이 달라도 정상입니다 — 둘 다 그대로 두세요.
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="datasafety">
+  <h2><span class="num">7</span>데이터 보안 양식 — 핵심</h2>
+  <p class="lead"><b>앱 콘텐츠 → 데이터 보안</b>. v1.0은 어떤 데이터도 수집/전송하지 않으므로 "수집 안 함" 경로로 진행합니다.</p>
+  <table>
+    <tr><th>Play 질문</th><th>답</th></tr>
+    <tr><td>앱이 사용자 데이터를 수집/공유합니까?</td><td><span class="pill no">아니요 (수집·공유 안 함)</span></td></tr>
+    <tr><td>수집하는 데이터 유형</td><td><b>없음</b></td></tr>
+    <tr><td>공유하는 데이터 유형</td><td><b>없음</b></td></tr>
+    <tr><td>전송 중 암호화</td><td>해당 없음 (데이터 미수집)</td></tr>
+    <tr><td>사용자가 데이터 삭제 요청 가능?</td><td>해당 없음 (서버 미보관, 기기 로컬만)</td></tr>
+  </table>
+  <div class="callout tip">
+    <b>최종 라벨:</b> "데이터가 수집되지 않음 · 데이터가 공유되지 않음 (No data collected / No data shared)".<br>
+    근거: 네트워크 코드·INTERNET 권한·광고/분석 SDK 전무. 유일한 저장은 기기 로컬 <code class="inline">user://save.cfg</code>(최고점수·스테이지·코인·업그레이드·통계·음소거)로 외부 전송이 없어 Play 정의상 '수집'이 아닙니다. 개인정보처리방침(§1·§5)과 일치.
+  </div>
+  <div class="callout danger">
+    <b>광고를 넣는 순간 이 답은 전부 바뀝니다.</b> AdMob은 광고 ID(AAID)를 수집하므로 데이터 보안 = "예", 광고 = "예", AD_ID 권한 = "예"로 다시 신고해야 합니다. 그 경로는 <a class="link" href="./google_admin_manual.html">google_admin_manual.html</a> 5장 참고.
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="release">
+  <h2><span class="num">8</span>출시 트랙 · Play 앱 서명</h2>
+  <p class="lead">처음부터 프로덕션에 올리지 말고 <b>내부 테스트 → (비공개 테스트) → 프로덕션</b> 순으로 승격합니다.</p>
+
+  <ol class="steps">
+    <li><b>내부 테스트 트랙 생성.</b> <b>테스트 및 출시 → 테스트 → 내부 테스트 → 새 버전 만들기</b>. 1장에서 받은 <code class="inline">hitezero.aab</code> 업로드.</li>
+    <li><b>Play 앱 서명 켜기.</b> 첫 업로드 시 자동 안내 → <b>켜기</b>. 구글이 배포 키를 관리하고, 우리는 업로드 키 <code class="inline">hitezero_upload.jks</code>(별칭 <code class="inline">upload</code>)로만 업로드합니다.</li>
+    <li><b>업로드 인증서 확인.</b> 업로드 후 Play Console에 등록된 업로드 인증서 SHA-256이 아래와 일치하는지 확인:
+      <pre><code>8F:21:9B:30:0C:B8:1F:74:06:31:A7:F2:60:7C:2D:6E:
+81:84:7E:86:6A:71:27:C5:88:24:38:44:C8:42:A1:62</code></pre>
+      <span class="pill pick">첫 업로드가 업로드 키를 영구 고정</span>하므로, CI 시크릿이 이 키스토어로 디코드되는지(<code class="inline">keytool -list -v</code>) 사전 확인 권장.</li>
+    <li><b>테스터 추가 + 실기기 검증.</b> 본인 이메일을 테스터로 추가 → 받은 링크로 실기기 설치 → 1회 풀플레이(Boot→Title→Game, 보스·하트·점수 저장) 확인.</li>
+    <li><b>프로덕션 승격.</b> 이상 없으면 <b>비공개 테스트(선택) → 프로덕션</b>으로 승격. 첫 제출은 구글 심사에 며칠 소요될 수 있습니다.</li>
+  </ol>
+
+  <div class="callout warn">
+    <b>타깃 API 레벨.</b> 현재 프리셋 <code class="inline">target_sdk=35</code>. Play의 신규 앱 타깃 API 요구는 매년 오르니, 등록 직전 Console이 요구하는 최신 레벨을 확인하고 필요 시 <code class="inline">target_sdk</code>를 올려 재빌드하세요.
+  </div>
+  <div class="callout danger">
+    <b>키스토어 백업.</b> <code class="inline">hitezero_upload.jks</code>와 비밀번호(<code class="inline">~/keystores/hitezero_upload.password.txt</code>)를 오프라인에 백업하세요. 분실 시 업로드 키 재설정은 가능하지만 번거롭습니다. <b>git/dist에는 절대 커밋 금지.</b>
+  </div>
+</section>
+
+<!-- 9 -->
+<section id="update">
+  <h2><span class="num">9</span>업데이트(2차 출시) 올리는 법</h2>
+  <p class="lead">출시 후 새 버전을 올릴 때마다 단 하나만 기억하면 됩니다: <b>versionCode를 +1</b>.</p>
+  <ol class="steps">
+    <li><b>버전 올리기.</b> <code class="inline">godot/export_presets.cfg</code> 의 <code class="inline">Android</code> 프리셋:
+      <pre><code>version/code=2          ; ← 직전 업로드보다 반드시 +1
+version/name="1.0.1"    ; 사람이 읽는 버전(자유)</code></pre>
+      같은 <code class="inline">version/code</code>를 재업로드하면 Play가 거부합니다.</li>
+    <li><b>AAB 재빌드 + 서명</b> (1장과 동일, CI면 새 <code class="inline">v1.0.1</code> 태그 푸시).</li>
+    <li><b>같은 트랙에 새 버전 업로드</b> → 출시 노트 작성 → 검토 → 출시.</li>
+  </ol>
+  <div class="callout info">스토어 텍스트·스크린샷만 바꾸는 변경은 AAB 재업로드 없이 스토어 등록정보 수정만으로 가능합니다(versionCode 무관).</div>
+</section>
+
+<!-- 10 -->
+<section id="checklist">
+  <h2><span class="num">10</span>제출 전 최종 체크리스트</h2>
+  <ul class="check">
+    <li>개발자 계정($25) + 신원확인 완료</li>
+    <li>업로드 파일이 <b>서명된 .aab</b>이고 패키지 <code>com.gghf.hitezero</code> (adtest 아님)</li>
+    <li>앱 만들기: 이름 HiteZero · 기본 언어 en-US · 게임 · 무료</li>
+    <li>스토어 등록정보: 제목·짧은/긴 설명(EN, +ko-KR) 입력</li>
+    <li>그래픽: 아이콘 512 · 피처 1024×500 · 스크린샷 2장+ (권장 4장)</li>
+    <li>개인정보처리방침 URL 등록 (https://hitezero.netlify.app/privacy)</li>
+    <li>앱 액세스 = 모든 기능 제한 없이 제공</li>
+    <li>광고 = <b>없음</b> / 인앱결제 = <b>없음</b></li>
+    <li>콘텐츠 등급 설문 제출 (판타지/만화 폭력=예, 나머지=아니요)</li>
+    <li>타깃 연령대 = <b>13+</b> (만 13세 미만 미포함)</li>
+    <li>데이터 보안 = "데이터 수집 안 함 / 공유 안 함"</li>
+    <li>정부/금융/건강/뉴스/COVID = 전부 아니요</li>
+    <li>미국 수출법 준수 체크</li>
+    <li>Play 앱 서명 켜기 + 업로드 인증서 SHA-256 <code>8F:21:…:A1:62</code> 일치 확인</li>
+    <li>내부 테스트로 실기기 1회 풀플레이 OK → 프로덕션 승격</li>
+    <li>키스토어 + 비밀번호 오프라인 백업 완료</li>
+  </ul>
+</section>
+
+<!-- 11 -->
+<section id="troubleshoot">
+  <h2><span class="num">11</span>자주 막히는 곳</h2>
+  <table>
+    <tr><th>증상</th><th>원인 · 해결</th></tr>
+    <tr><td>"웹 zip 올렸는데 거부됨"</td><td>당연 — Play는 <b>.aab만</b> 받음. 1장으로 AAB 빌드.</td></tr>
+    <tr><td>버전 코드 충돌</td><td>같은 <code>version/code</code> 재업로드 불가. 항상 +1.</td></tr>
+    <tr><td>서명 안 된 빌드 거부</td><td>에디터 export에서 "Export With Debug"가 켜져 있었음. 해제 후 릴리스로 재빌드(또는 CI 사용).</td></tr>
+    <tr><td>AAB 대신 APK가 나옴</td><td>프리셋 <code>export_format</code>이 0으로 되돌아감. <code>Android</code> 프리셋은 1(AAB)이어야 함.</td></tr>
+    <tr><td>패키지가 <code>.adtest</code>로 올라감</td><td>"Android Test (Ads)" 프리셋으로 빌드한 것. 출시는 <code>"Android"</code> 프리셋만 사용.</td></tr>
+    <tr><td>업로드 키 분실</td><td>Play Console에서 업로드 키 재설정 요청 가능(앱 서명 키는 구글 보관 → 앱은 안 죽음). 그래도 .jks 백업.</td></tr>
+    <tr><td>타깃 API 경고</td><td>Console이 요구하는 최신 레벨로 <code>target_sdk</code> 올려 재빌드.</td></tr>
+    <tr><td>데이터 보안 ↔ 권한 불일치 경고</td><td>광고를 넣은 빌드인데 "수집 안 함"으로 신고하면 충돌. v1.0은 권한에 INTERNET/AD_ID가 없어야 정합.</td></tr>
+  </table>
+</section>
+
+<!-- 12 -->
+<section id="dont">
+  <h2><span class="num">12</span>절대 하면 안 되는 것</h2>
+  <div class="callout danger"><b>ad-test 빌드(<code>com.gghf.hitezero.adtest</code> / APK)를 출시 트랙에 올리기</b> — 패키지가 다르고 광고 SDK가 섞임. 출시는 <code>"Android"</code> 프리셋(<code>com.gghf.hitezero</code>, AAB)만.</div>
+  <div class="callout danger"><b>판타지/만화 폭력을 '아니요'로 낮춰 신고</b> — 과소신고는 등급 취소·앱 제거 사유. 칼 투척 = 만화적 폭력 '예'가 정답.</div>
+  <div class="callout danger"><b>광고 넣고도 "데이터 미수집"으로 신고</b> — 정책 위반. 광고 도입 시 데이터 보안·광고·AD_ID를 모두 "예"로 갱신.</div>
+  <div class="callout danger"><b>키스토어/비밀번호를 git·dist에 커밋</b> — 시크릿 유출. repo 바깥(<code>~/keystores/</code>)에 두고 오프라인 백업.</div>
+  <div class="callout warn"><b>같은 versionCode 재업로드</b> — 무조건 거부. 업로드마다 +1.</div>
+</section>
+
+<footer>
+  HiteZero · Google Play 등록 매뉴얼 · 2026-06-22<br>
+  광고 수익화는 <a class="link" href="./google_admin_manual.html">google_admin_manual.html</a> 참고 · 원문 데이터: <code>godot/docs/play_console_submission.md</code> · <code>google_play_release.md</code> · <code>aso_store_kit.md</code><br>
+  실제 콘솔 UI 문구는 구글 정책에 따라 달라질 수 있습니다.
+</footer>
+
+</div>
+</body>
+</html>

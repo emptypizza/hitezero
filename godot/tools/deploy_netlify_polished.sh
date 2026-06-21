@@ -46,6 +46,15 @@ fi
 # privacy 페이지
 [[ -f "$REPO_ROOT/store_assets/privacy.html" ]] && cp "$REPO_ROOT/store_assets/privacy.html" "$OUT_DIR/privacy/index.html"
 
+# 출시 운영 매뉴얼 → /guide/ (구글 플레이 등록 + 광고 수익화 인포그래픽)
+if [[ -f "$REPO_ROOT/docs/google_play_registration_manual.html" ]]; then
+  mkdir -p "$OUT_DIR/guide"
+  cp "$REPO_ROOT/docs/google_play_registration_manual.html" "$OUT_DIR/guide/"
+  cp "$REPO_ROOT/docs/google_admin_manual.html" "$OUT_DIR/guide/" 2>/dev/null || true
+  cp "$REPO_ROOT/docs/manuals_index.html" "$OUT_DIR/guide/index.html" 2>/dev/null || true
+  echo "guide manuals → $OUT_DIR/guide/ (/guide/)"
+fi
+
 # --- netlify.toml (wasm MIME + 캐시 헤더) ---
 cat > "$OUT_DIR/netlify.toml" <<'TOML'
 [build]
@@ -107,4 +116,4 @@ echo "다음 중 하나로 배포:"
 echo "  A) app.netlify.com/drop 에 위 폴더 드래그"
 echo "  B) netlify deploy --prod --dir \"$OUT_DIR\""
 echo "  C) Netlify MCP deploy-site의 npx 명령을 위 폴더에서 실행(site_id 742653ed-62bd-4e8b-bcd0-a85cc36ac4ed)"
-echo "배포 후 확인: https://hitezero.netlify.app (탭 파비콘) · /privacy · OG 미리보기"
+echo "배포 후 확인: https://hitezero.netlify.app (탭 파비콘) · /privacy · /guide/ (출시 매뉴얼) · OG 미리보기"

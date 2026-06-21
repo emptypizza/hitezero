@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiteZero · 구글 관리자 광고 솔루션 매뉴얼</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2a3242;
+    --txt:#e6edf3; --muted:#9aa7b8; --accent:#22c55e; --accent2:#3b82f6;
+    --warn:#f59e0b; --danger:#ef4444; --code:#0b0f16;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:linear-gradient(180deg,#0a0e14,#0d1117 240px);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",Roboto,sans-serif;
+    line-height:1.65; font-size:15.5px;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:0 22px 120px}
+  header.hero{
+    padding:54px 22px 38px; text-align:center;
+    border-bottom:1px solid var(--line);
+    background:radial-gradient(900px 300px at 50% -40px, rgba(34,197,94,.12), transparent);
+  }
+  header.hero .badge{
+    display:inline-block; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); border:1px solid rgba(34,197,94,.35); border-radius:999px;
+    padding:5px 14px; margin-bottom:18px; background:rgba(34,197,94,.06);
+  }
+  header.hero h1{font-size:30px; margin:0 0 8px; font-weight:800; letter-spacing:-.02em}
+  header.hero p{color:var(--muted); margin:0; max-width:620px; margin-inline:auto}
+  .updated{margin-top:14px; font-size:12.5px; color:var(--muted)}
+
+  nav.toc{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px 24px; margin:34px 0; columns:2; column-gap:34px;
+  }
+  nav.toc h2{margin:0 0 12px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); column-span:all}
+  nav.toc a{display:block; color:var(--txt); text-decoration:none; padding:5px 0; font-size:14.5px; border-bottom:1px dashed transparent}
+  nav.toc a:hover{color:var(--accent); border-bottom-color:var(--line)}
+  nav.toc a .n{color:var(--accent2); font-variant-numeric:tabular-nums; margin-right:8px; font-weight:700}
+
+  section{margin:46px 0; scroll-margin-top:20px}
+  section > h2{
+    font-size:23px; font-weight:800; letter-spacing:-.01em; margin:0 0 6px;
+    padding-bottom:10px; border-bottom:1px solid var(--line);
+  }
+  section > h2 .num{
+    display:inline-grid; place-items:center; width:30px; height:30px; border-radius:9px;
+    background:linear-gradient(135deg,var(--accent2),#6366f1); color:#fff; font-size:15px; margin-right:11px; vertical-align:2px;
+  }
+  .lead{color:var(--muted); margin:.2em 0 1.4em}
+  h3{font-size:17px; margin:26px 0 8px; font-weight:700}
+
+  .steps{counter-reset:step; list-style:none; padding:0; margin:0}
+  .steps > li{
+    position:relative; counter-increment:step;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px 16px 58px; margin:12px 0;
+  }
+  .steps > li::before{
+    content:counter(step); position:absolute; left:16px; top:15px;
+    width:28px; height:28px; border-radius:8px; background:var(--panel2); border:1px solid var(--line);
+    color:var(--accent); font-weight:800; display:grid; place-items:center; font-size:14px;
+  }
+  .steps > li b{color:#fff}
+
+  code, kbd{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:13px}
+  code.inline{background:var(--code); border:1px solid var(--line); padding:2px 6px; border-radius:6px; color:#8fe3a8; white-space:nowrap}
+  pre{
+    background:var(--code); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; overflow:auto; font-size:13px; position:relative; margin:12px 0;
+  }
+  pre code{color:#cfe3ff; white-space:pre}
+  .filehint{font-size:12.5px; color:var(--muted); margin:0 0 4px}
+  .filehint code{color:var(--warn)}
+
+  .callout{border-radius:11px; padding:14px 16px 14px 48px; margin:16px 0; position:relative; border:1px solid; font-size:14.5px}
+  .callout::before{position:absolute; left:15px; top:13px; font-size:18px}
+  .callout.warn{background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.4)} .callout.warn::before{content:"⚠️"}
+  .callout.danger{background:rgba(239,68,68,.09); border-color:rgba(239,68,68,.45)} .callout.danger::before{content:"🚫"}
+  .callout.tip{background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.4)} .callout.tip::before{content:"✅"}
+  .callout.info{background:rgba(59,130,246,.08); border-color:rgba(59,130,246,.4)} .callout.info::before{content:"ℹ️"}
+  .callout b{color:#fff}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+  th{background:var(--panel2); color:var(--muted); font-weight:600; font-size:13px}
+  td code{color:#8fe3a8}
+
+  .pill{display:inline-block; font-size:11.5px; padding:2px 9px; border-radius:999px; font-weight:700; letter-spacing:.02em}
+  .pill.test{background:rgba(59,130,246,.15); color:#8ec1ff; border:1px solid rgba(59,130,246,.4)}
+  .pill.real{background:rgba(34,197,94,.15); color:#7ee2a0; border:1px solid rgba(34,197,94,.4)}
+
+  .check{list-style:none; padding:0; margin:0}
+  .check li{padding:8px 0 8px 30px; position:relative; border-bottom:1px solid var(--line)}
+  .check li::before{content:"☐"; position:absolute; left:4px; top:7px; color:var(--accent); font-size:17px}
+  .check li:last-child{border-bottom:none}
+
+  a.link{color:var(--accent2); text-decoration:none; border-bottom:1px solid rgba(59,130,246,.4)}
+  a.link:hover{color:#9cc4ff}
+  footer{margin-top:60px; padding-top:24px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; text-align:center}
+
+  @media print{
+    body{background:#fff; color:#111; font-size:11pt}
+    header.hero,nav.toc,.callout{break-inside:avoid}
+    pre,code.inline{background:#f3f3f3; color:#111; border-color:#ccc}
+    section{break-inside:auto}
+  }
+  @media(max-width:680px){ nav.toc{columns:1} section>h2{font-size:20px} }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="badge">HiteZero · Google Admin 솔루션 매뉴얼</div>
+  <h1>테스트 광고 → 실제 광고 수익화 가이드</h1>
+  <p>현재 빌드는 <b>Google 테스트 광고</b>로 동작합니다. 이 문서는 AdMob·AdSense·Google Play Console에서
+  직접 진행해 <b>실제 광고를 송출</b>하기까지의 모든 관리자 작업을 순서대로 정리합니다.</p>
+  <div class="updated">작성일 2026-06-21 · 대상 앱 패키지(출시): <code class="inline">com.gghf.hitezero</code></div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <h2>목차</h2>
+  <a href="#status"><span class="n">0</span>현재 상태 한눈에</a>
+  <a href="#admob"><span class="n">1</span>AdMob 콘솔 설정 (Android)</a>
+  <a href="#code"><span class="n">2</span>코드에 실 광고 ID 반영</a>
+  <a href="#consent"><span class="n">3</span>사용자 동의(UMP·GDPR)</a>
+  <a href="#play"><span class="n">4</span>Google Play Console 출시</a>
+  <a href="#datasafety"><span class="n">5</span>데이터 보안·광고 선언 (중요)</a>
+  <a href="#adsense"><span class="n">6</span>AdSense 설정 (웹 전용)</a>
+  <a href="#adstxt"><span class="n">7</span>app-ads.txt / ads.txt</a>
+  <a href="#checklist"><span class="n">8</span>최종 체크리스트</a>
+  <a href="#dont"><span class="n">9</span>절대 하면 안 되는 것</a>
+</nav>
+
+<!-- 0 -->
+<section id="status">
+  <h2><span class="num">0</span>현재 상태 한눈에</h2>
+  <p class="lead">지금 만들어진 테스트 APK가 무엇이고, 무엇을 바꿔야 실제 수익이 나는지부터 정리합니다.</p>
+
+  <table>
+    <tr><th>구분</th><th>현재 (테스트)</th><th>목표 (실제)</th></tr>
+    <tr><td>광고 종류</td><td><span class="pill test">TEST</span> Google 샘플 배너</td><td><span class="pill real">REAL</span> 내 AdMob 광고</td></tr>
+    <tr><td>App ID</td><td><code>ca-app-pub-3940256099942544~3347511713</code></td><td>내 AdMob App ID</td></tr>
+    <tr><td>배너 단위 ID</td><td><code>ca-app-pub-3940256099942544/2014213617</code></td><td>내 배너 광고 단위 ID</td></tr>
+    <tr><td>빌드</td><td>디버그 서명 APK (<code>.adtest</code>)</td><td>업로드 키 서명 AAB</td></tr>
+    <tr><td>수익</td><td>없음 (테스트는 정산 안 됨)</td><td>발생 → AdMob 정산</td></tr>
+  </table>
+
+  <div class="callout info">
+    <b>왜 테스트 ID부터?</b> 테스트 광고는 항상 100% 노출되어 배치/레이아웃 검증에 안전합니다.
+    실제 광고 ID를 개발 중에 클릭·노출하면 <b>계정 정지</b> 위험이 있으므로, 실 ID 적용 후에는 반드시
+    <b>테스트 기기 등록</b>(3장)을 해야 합니다.
+  </div>
+
+  <h3>이 매뉴얼이 가정하는 것</h3>
+  <ul>
+    <li>구글 계정(<code class="inline">team.gghf@gmail.com</code> 등)이 있고 결제수단을 등록할 수 있음</li>
+    <li>출시용 <b>업로드 키스토어</b>는 이미 보유 (CI/문서에 기록됨 — <code class="inline">~/keystores/hitezero_upload.jks</code>)</li>
+    <li>웹 배포 도메인이 있음 (예: <code class="inline">hitezero.netlify.app</code>) — app-ads.txt/AdSense에 필요</li>
+  </ul>
+</section>
+
+<!-- 1 -->
+<section id="admob">
+  <h2><span class="num">1</span>AdMob 콘솔 설정 (Android 앱)</h2>
+  <p class="lead"><a class="link" href="https://apps.admob.com" target="_blank">apps.admob.com</a> 에서 진행합니다. 모바일 앱(Android/iOS) 광고는 <b>AdMob</b>, 웹 광고는 <b>AdSense</b>로 서로 다른 제품입니다.</p>
+
+  <ol class="steps">
+    <li><b>AdMob 계정 생성/로그인.</b> <a class="link" href="https://apps.admob.com" target="_blank">apps.admob.com</a> 접속 → 구글 계정으로 로그인 → 국가·시간대·결제 통화 설정. (AdMob 가입 시 AdSense 계정이 함께 연결됩니다.)</li>
+    <li><b>결제 정보 등록.</b> 좌측 <b>지급(Payments)</b> → 주소·세금정보·수령 계좌 입력. (지급 기준액 도달 전이라도 미리 등록 권장.)</li>
+    <li><b>앱 추가.</b> 좌측 <b>앱(Apps)</b> → <b>앱 추가</b> → 플랫폼 <b>Android</b> 선택.
+      <ul>
+        <li>이미 Google Play에 등록했다면 "예" → 패키지 <code class="inline">com.gghf.hitezero</code> 검색해 연결</li>
+        <li>아직 미등록이면 "아니요" → 앱 이름 <b>HiteZero</b> 직접 입력</li>
+      </ul>
+    </li>
+    <li><b>앱 ID(App ID) 확보.</b> 앱 생성 직후 <code class="inline">ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY</code> 형식의 App ID가 발급됩니다. <b>이 값을 메모</b>해 두세요. (구분자가 물결표 <code class="inline">~</code>)</li>
+    <li><b>배너 광고 단위 생성.</b> 해당 앱 → <b>광고 단위(Ad units)</b> → <b>광고 단위 추가</b> → 형식 <b>배너(Banner)</b> 선택 → 이름 예: <code class="inline">hitezero_bottom_banner</code> → 생성.
+      발급되는 <code class="inline">ca-app-pub-XXXX/ZZZZZZZZZZ</code> 형식(구분자 슬래시 <code class="inline">/</code>)의 <b>광고 단위 ID도 메모</b>.</li>
+    <li><b>(권장) 리워드 광고 단위도 생성.</b> 이 프로젝트엔 "광고 보고 부활(rewarded revive)" 기능이 준비돼 있습니다. 형식 <b>보상형(Rewarded)</b>으로 하나 더 만들어 두면 나중에 바로 연결 가능.</li>
+  </ol>
+
+  <div class="callout tip">
+    이 단계가 끝나면 손에 <b>App ID 1개</b> + <b>배너 광고 단위 ID 1개</b>(+선택 리워드 ID)가 있어야 합니다. 다음 장에서 코드에 넣습니다.
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="code">
+  <h2><span class="num">2</span>코드에 실 광고 ID 반영</h2>
+  <p class="lead">테스트 ID를 내 ID로 교체하는 작업입니다. 우리 프로젝트에서 <b>정확히 두 곳</b>만 바꾸면 됩니다.</p>
+
+  <h3>① App ID — <code>android_export.cfg</code></h3>
+  <p class="filehint">파일: <code>godot/addons/AdmobPlugin/android_export.cfg</code></p>
+  <pre><code>[General]
+is_real=true                  ; ← false에서 true로 변경 (실 ID 사용)
+
+[Debug]
+app_id="ca-app-pub-3940256099942544~3347511713"   ; 테스트용은 그대로 둬도 됨
+
+[Release]
+app_id="ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY"    ; ← 내 AdMob App ID</code></pre>
+  <p><code class="inline">is_real=true</code>면 빌드 시 <b>[Release]의 App ID</b>가 AndroidManifest에 주입됩니다.</p>
+
+  <h3>② 배너 광고 단위 ID — <code>banner_ads.gd</code></h3>
+  <p class="filehint">파일: <code>godot/scripts/banner_ads.gd</code> — <code>_ready()</code> 안 배너 설정 부분</p>
+  <pre><code>_admob = Admob.new()
+_admob.banner_position = LoadAdRequest.AdPosition.BOTTOM
+_admob.banner_size = LoadAdRequest.RequestedAdSize.BANNER
+_admob.banner_anchor_to_safe_area = true
+_admob.android_real_banner_id = "ca-app-pub-XXXX/ZZZZ"   # ← 추가: 내 배너 단위 ID
+# (android_debug_banner_id 는 테스트 ID 기본값이라 그대로 둠)</code></pre>
+
+  <div class="callout warn">
+    <b>디버그 vs 릴리스 자동 전환.</b> 플러그인은 <b>디버그 빌드</b>면 <code class="inline">android_debug_banner_id</code>(테스트),
+    <b>릴리스 빌드</b>면 <code class="inline">android_real_banner_id</code>(실제)를 사용합니다.
+    따라서 <b>실 광고는 반드시 릴리스 빌드(<code class="inline">--export-release</code>)로만</b> 나오며, 개발 중 디버그 빌드에선 계속 테스트 광고가 떠 안전합니다.
+  </div>
+
+  <h3>③ 릴리스 APK/AAB 빌드</h3>
+  <pre><code>cd godot
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+
+# Play 업로드용 AAB (실 서명) — 별도 Android 프리셋 사용
+godot --headless --path . --export-release "Android" \
+  ../build/android/hitezero.aab</code></pre>
+
+  <div class="callout danger">
+    <b>출시 빌드 격리 주의.</b> AdMob 플러그인을 활성화한 이 작업 브랜치(<code class="inline">neon-style-7cc31</code>)에서
+    출시 AAB를 빌드하면 매니페스트에 <b>INTERNET·AD_ID 권한과 AdMob SDK가 포함</b>됩니다.
+    이는 의도된 동작(광고를 넣으니까)이지만, 기존 README/개인정보처리방침의 <b>"완전 오프라인 / 데이터 수집 없음"</b> 문구와 충돌합니다.
+    실제 출시 전 5장(데이터 보안 선언)과 문서를 반드시 업데이트하세요.
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="consent">
+  <h2><span class="num">3</span>사용자 동의 — UMP / GDPR / 테스트 기기</h2>
+  <p class="lead">개인 맞춤 광고는 동의 수집이 필요합니다. 유럽(EEA)·영국 사용자에게는 <b>필수</b>이며, 미설정 시 광고가 노필(빈 배너)될 수 있습니다.</p>
+
+  <ol class="steps">
+    <li><b>AdMob → 개인정보 보호 및 메시지(Privacy & messaging).</b> <b>GDPR 동의 메시지(유럽 사용자 동의)</b>를 생성. 개인정보처리방침 URL(예: <code class="inline">https://hitezero.netlify.app/privacy</code>)이 필요합니다.</li>
+    <li><b>(미국) 주(州) 규정 메시지</b>도 동일 메뉴에서 선택적으로 생성.</li>
+    <li><b>UMP SDK 흐름 연동.</b> 플러그인의 동의 API(<code class="inline">ConsentRequestParameters</code>, <code class="inline">UserConsent</code>)로 첫 실행 시 동의를 요청하도록 연결. (필요 시 별도 작업으로 도와드릴 수 있습니다.)</li>
+    <li><b>실 광고 검증 시 테스트 기기 등록.</b> AdMob → <b>설정 → 테스트 기기</b>에 내 기기 광고 ID 추가. 또는 코드에서 테스트 기기 목록 지정. 이러면 실 광고 단위라도 "Test Ad"가 떠 <b>무효 트래픽 없이</b> 검증 가능.</li>
+  </ol>
+
+  <div class="callout danger"><b>실 광고 단위를 본인이 직접 클릭하지 마세요.</b> 무효 활동으로 간주되어 계정이 정지될 수 있습니다. 검증은 반드시 테스트 기기 등록 상태에서.</div>
+</section>
+
+<!-- 4 -->
+<section id="play">
+  <h2><span class="num">4</span>Google Play Console 출시</h2>
+  <p class="lead"><a class="link" href="https://play.google.com/console" target="_blank">play.google.com/console</a> 에서 진행. 이미 출시 에셋(아이콘·스크린샷·키아트)은 <code class="inline">store_assets/</code> 에 준비돼 있습니다.</p>
+
+  <ol class="steps">
+    <li><b>개발자 계정 등록.</b> 최초 1회 <b>$25</b> 등록비. (개인/사업자 신원 확인 필요할 수 있음.)</li>
+    <li><b>앱 만들기.</b> 앱 이름 <b>HiteZero</b>, 언어, 무료 앱 선택.</li>
+    <li><b>App Signing 활성화.</b> Play App Signing 사용(권장). 업로드 키 인증서(SHA-256은 CI 문서에 기록됨)로 서명한 AAB 업로드.</li>
+    <li><b>스토어 등록정보 작성.</b> 짧은/긴 설명, 스크린샷(<code class="inline">store_assets/play_screen_*.png</code>), 기능 그래픽(<code class="inline">play_feature_1024x500.png</code>), 아이콘(<code class="inline">play_icon_512.png</code>) 업로드.</li>
+    <li><b>콘텐츠 등급 설문</b> 작성 → 등급 발급.</li>
+    <li><b>타겟 연령·광고 포함 여부</b> 선언 → 5장 참고(광고 있음 = 예).</li>
+    <li><b>데이터 보안(Data safety) 양식</b> 작성 → 5장 참고(AdMob은 데이터 수집함).</li>
+    <li><b>테스트 트랙부터.</b> <b>내부 테스트(Internal testing)</b> 트랙에 AAB 업로드 → 본인·소수 테스터로 실 광고/결제 확인 후 <b>프로덕션</b> 승격.</li>
+  </ol>
+</section>
+
+<!-- 5 -->
+<section id="datasafety">
+  <h2><span class="num">5</span>데이터 보안 · 광고 선언 <span class="pill real" style="vertical-align:3px">중요</span></h2>
+  <p class="lead">광고 SDK를 넣는 순간, 앱은 더 이상 "데이터 미수집"이 아닙니다. Play 정책상 정확히 신고하지 않으면 <b>앱 비공개/거부</b>될 수 있습니다.</p>
+
+  <table>
+    <tr><th>Play Console 항목</th><th>광고(AdMob) 도입 후 답변</th></tr>
+    <tr><td>앱에 광고가 포함됩니까?</td><td><b>예 (Contains ads)</b></td></tr>
+    <tr><td>데이터를 수집/공유합니까?</td><td><b>예</b> — 기기·광고 식별자(AAID) 등</td></tr>
+    <tr><td>수집 데이터 유형</td><td>기기 또는 기타 ID(광고 ID), 대략적 위치(광고용일 수 있음), 앱 상호작용</td></tr>
+    <tr><td>목적</td><td>광고/마케팅, 분석</td></tr>
+    <tr><td>AD_ID 권한 사용</td><td><b>예</b> (매니페스트에 <code>com.google.android.gms.permission.AD_ID</code> 포함됨)</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <b>기존 문서 정합성.</b> 현재 <code class="inline">README.md</code>·<code class="inline">store_assets/privacy.html</code>은 "광고 없음 / 완전 오프라인 / 데이터 미수집"을 명시합니다.
+    광고 도입 시 이 문구들을 <b>모두 수정</b>하고, 개인정보처리방침에 <b>Google AdMob</b>을 데이터 처리자로 명시해야 합니다. (AdMob 약관 + Google의 권장 문구 참고.)
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="adsense">
+  <h2><span class="num">6</span>AdSense 설정 (웹 빌드 전용)</h2>
+  <p class="lead"><b>AdSense는 APK에 들어가지 않습니다.</b> 브라우저 JavaScript 기반이라 모바일 앱(native)에선 동작하지 않습니다.
+  웹 버전(<code class="inline">dist/netlify-polished</code> 등)의 <b>HTML 페이지에서 canvas 아래</b>에 배치하는 별도 작업입니다.</p>
+
+  <ol class="steps">
+    <li><b>AdSense 가입·사이트 등록.</b> <a class="link" href="https://adsense.google.com" target="_blank">adsense.google.com</a> → 사이트 URL(예: <code class="inline">hitezero.netlify.app</code>) 추가.</li>
+    <li><b>사이트 승인 대기.</b> AdSense는 <b>콘텐츠 심사·승인</b>이 필요합니다(수일~수주). 승인 전에는 광고가 빈 칸으로 나옵니다. 로컬/미승인 도메인에선 실광고 미표시.</li>
+    <li><b>ads.txt 게시.</b> 웹 루트에 <code class="inline">ads.txt</code> 추가 (7장 참고).</li>
+    <li><b>광고 단위 코드 삽입.</b> AdSense에서 <b>디스플레이 광고 단위</b> 생성 → 스니펫을 게임 페이지의 canvas 아래에 삽입:</li>
+  </ol>
+  <pre><code>&lt;!-- &lt;head&gt; 안 1회 --&gt;
+&lt;script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+        crossorigin="anonymous"&gt;&lt;/script&gt;
+
+&lt;!-- 게임 canvas 아래(하단 배너 자리) --&gt;
+&lt;ins class="adsbygoogle"
+     style="display:block" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+     data-ad-slot="ZZZZZZZZZZ" data-ad-format="auto" data-full-width-responsive="true"&gt;&lt;/ins&gt;
+&lt;script&gt;(adsbygoogle = window.adsbygoogle || []).push({});&lt;/script&gt;</code></pre>
+  <div class="callout info">웹 빌드의 커스텀 HTML 셸에 이 슬롯을 넣는 작업은 원하시면 코드로 붙여드릴 수 있습니다(라이브 <code class="inline">dist</code>는 임의로 건드리지 않았습니다).</div>
+</section>
+
+<!-- 7 -->
+<section id="adstxt">
+  <h2><span class="num">7</span>app-ads.txt / ads.txt — 수익 보호 필수</h2>
+  <p class="lead">광고 인벤토리 위조를 막는 인증 파일입니다. 미게시 시 수익이 크게 줄 수 있어 <b>반드시 게시</b>하세요.</p>
+
+  <h3>모바일 앱(AdMob) → <code>app-ads.txt</code></h3>
+  <ol class="steps">
+    <li>Play 스토어 등록정보의 <b>개발자 웹사이트</b>에 도메인을 지정 (예: <code class="inline">hitezero.netlify.app</code>).</li>
+    <li>그 도메인 <b>루트</b>에 <code class="inline">app-ads.txt</code> 게시. AdMob → app-ads.txt 메뉴에서 본인 줄을 복사:</li>
+  </ol>
+  <pre><code>google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0</code></pre>
+  <p>접속 확인: <code class="inline">https://hitezero.netlify.app/app-ads.txt</code></p>
+
+  <h3>웹(AdSense) → <code>ads.txt</code></h3>
+  <p>같은 한 줄을 파일명 <code class="inline">ads.txt</code>로 웹 루트에 게시 (Netlify면 <code class="inline">dist/.../ads.txt</code> 또는 publish 디렉터리에 포함).</p>
+</section>
+
+<!-- 8 -->
+<section id="checklist">
+  <h2><span class="num">8</span>최종 체크리스트</h2>
+  <ul class="check">
+    <li>AdMob 계정 생성 + 결제 정보 등록</li>
+    <li>AdMob에 Android 앱 추가 → <b>App ID</b> 확보</li>
+    <li>배너 <b>광고 단위 ID</b> 생성·확보 (+선택 리워드)</li>
+    <li><code>android_export.cfg</code>: <code>is_real=true</code> + [Release] 실 App ID</li>
+    <li><code>banner_ads.gd</code>: <code>android_real_banner_id</code> 설정</li>
+    <li>GDPR/UMP 동의 메시지 생성 + 개인정보처리방침 URL 연결</li>
+    <li>테스트 기기 등록 후 <b>릴리스 빌드</b>로 실 광고 1회 검증</li>
+    <li>README·privacy 문구를 "광고 있음/데이터 수집"으로 수정</li>
+    <li>Play 개발자 계정($25) + 앱 생성 + 등록정보·스크린샷</li>
+    <li>Play <b>데이터 보안 양식</b> 정확히 작성 (광고/AD_ID = 예)</li>
+    <li><code>app-ads.txt</code>(앱) / <code>ads.txt</code>(웹) 루트 게시</li>
+    <li>내부 테스트 트랙 → 검증 → 프로덕션 승격</li>
+    <li>(웹) AdSense 사이트 승인 + canvas 하단 슬롯 삽입</li>
+  </ul>
+</section>
+
+<!-- 9 -->
+<section id="dont">
+  <h2><span class="num">9</span>절대 하면 안 되는 것</h2>
+  <div class="callout danger"><b>실 광고를 본인이 클릭/반복 노출</b> — 무효 트래픽 → 계정 영구 정지 가능. 검증은 테스트 기기로만.</div>
+  <div class="callout danger"><b>광고 도입 후 "데이터 미수집"으로 Play 신고</b> — 정책 위반. AdMob은 광고 ID를 수집합니다.</div>
+  <div class="callout danger"><b>이 ad-test 브랜치를 그대로 release로 머지</b> — 출시 프로파일이 오염됩니다. 광고 포함 출시는 문서·선언을 갱신한 별도 정식 절차로.</div>
+  <div class="callout warn"><b>app-ads.txt 누락</b> — 위조 인벤토리로 분류돼 수익 급감. 도메인 루트 게시 필수.</div>
+</section>
+
+<footer>
+  HiteZero · Google Admin 광고 솔루션 매뉴얼 · 2026-06-21<br>
+  이 문서는 관리자 콘솔 작업 안내용입니다. 실제 콘솔 UI 문구는 구글 정책에 따라 달라질 수 있습니다.
+</footer>
+
+</div>
+</body>
+</html>
