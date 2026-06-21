@@ -47,6 +47,15 @@
   a.card .go{margin-top:16px; font-size:13px; font-weight:700; color:var(--accent2)}
   a.card.play{background:linear-gradient(160deg, rgba(59,130,246,.10), var(--panel))}
   a.card.ads{background:linear-gradient(160deg, rgba(34,197,94,.10), var(--panel))}
+  a.dlbar{display:flex; align-items:center; gap:16px; margin-top:18px; text-decoration:none;
+    background:linear-gradient(135deg, rgba(34,197,94,.16), var(--panel)); border:1px solid rgba(34,197,94,.4);
+    border-radius:16px; padding:18px 22px; transition:.16s ease; color:var(--txt)}
+  a.dlbar:hover{transform:translateY(-2px); border-color:rgba(34,197,94,.7); box-shadow:0 12px 34px rgba(34,197,94,.22)}
+  a.dlbar .ico{font-size:30px; line-height:1}
+  a.dlbar .t{flex:1}
+  a.dlbar .t b{font-size:17px; font-weight:800; display:block}
+  a.dlbar .t span{color:var(--muted); font-size:13.5px}
+  a.dlbar .go{font-size:13px; font-weight:800; color:var(--accent); white-space:nowrap}
   .meta{margin-top:40px; padding:18px 20px; background:var(--panel); border:1px solid var(--line); border-radius:14px; color:var(--muted); font-size:13.5px}
   .meta b{color:#fff}
   .meta code{font-family:"SF Mono",ui-monospace,Menlo,monospace; font-size:12.5px; color:#8fe3a8; background:#0b0f16; border:1px solid var(--line); padding:1px 6px; border-radius:5px}
@@ -82,6 +91,15 @@
       <div class="go">열기 →</div>
     </a>
   </div>
+
+  <a class="dlbar" href="https://github.com/emptypizza/hitezero/releases/download/apk-testbuild-20260622/hitezero-v1.0.0.apk">
+    <span class="ico">📱</span>
+    <span class="t">
+      <b>핸드폰 테스트 APK 다운로드</b>
+      <span>안드로이드 사이드로드용 · com.gghf.hitezero · v1.0.0 · 광고 미표시 · 86MB</span>
+    </span>
+    <span class="go">받기 →</span>
+  </a>
 
   <div class="meta">
     대상 패키지 <code>com.gghf.hitezero</code> · 버전 <code>1.0.0</code> · 무료 / v1.0 광고·결제·데이터수집 없음 ·
