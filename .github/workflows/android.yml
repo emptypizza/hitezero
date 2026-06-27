@@ -109,6 +109,33 @@ jobs:
           sed -i 's#gradle_build/export_format=0#gradle_build/export_format=1#' export_presets.cfg
           echo "--- outputs ---"; ls -la "../${{ env.OUT_DIR }}"
 
+      - name: Verify release signatures
+        # Guards against the silent-failure mode where a missing/typo'd keystore
+        # secret makes Godot fall back to an unsigned or debug-signed artifact
+        # that still "builds" green and becomes a Play upload candidate.
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -e
+          APK="../${{ env.OUT_DIR }}/hitezero.apk"
+          AAB="../${{ env.OUT_DIR }}/hitezero.aab"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          APKSIGNER="$(find "$SDK" -name apksigner -type f 2>/dev/null | sort | tail -1)"
+          echo "apksigner: $APKSIGNER"
+          test -n "$APKSIGNER"
+          echo "=== APK signature ==="
+          "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/apk_certs.txt
+          if grep -qi "CN=Android Debug" /tmp/apk_certs.txt; then
+            echo "::error::APK is signed with the Android DEBUG certificate, not the upload key."
+            exit 1
+          fi
+          echo "=== AAB signature ==="
+          jarsigner -verify "$AAB" | tee /tmp/aab_verify.txt
+          if ! grep -qi "jar verified" /tmp/aab_verify.txt; then
+            echo "::error::AAB failed signature verification (not signed by the upload key)."
+            exit 1
+          fi
+          echo "✅ Release signatures verified."
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

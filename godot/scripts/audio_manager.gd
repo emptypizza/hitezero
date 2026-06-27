@@ -19,6 +19,7 @@ var _base_volume: Dictionary = {}
 
 func _ready() -> void:
 	_build_all_sounds()
+	_build_music()
 
 
 func play(sound_name: String, pitch: float = 1.0, volume_db_offset: float = 0.0) -> void:
@@ -273,3 +274,165 @@ func _gen_subthump() -> AudioStreamWAV:
 		var click := randf_range(-1.0, 1.0) * exp(-t * 240.0) * 0.25
 		buf[i] = clampf((sin(phase) * 0.85 + click) * env, -1.0, 1.0)
 	return _make_wav(buf)
+
+
+# ─── Procedural looping BGM ────────────────────────────────────────────────
+# Two AudioStreamPlayers cross-fade so title↔play↔boss transitions don't hard
+# cut. Music plays on the Master bus, so the existing mute pill (which mutes
+# Master) silences BGM along with SFX — no separate music toggle needed.
+#
+# Usage: AudioManager.play_music("title" | "play" | "boss")  ·  stop_music()
+
+const MUSIC_VOLUME_DB := -13.0
+const MUSIC_FADE := 0.9
+const MIDI_A4 := 69
+
+var _music_players: Array[AudioStreamPlayer] = []
+var _music_tracks: Dictionary = {}
+var _current_music: String = ""
+var _music_idx: int = 0
+var _music_tween: Tween
+
+
+func _build_music() -> void:
+	# Each track: chord roots (MIDI note numbers, one per bar), a melody scale
+	# (semitone offsets played as a 16th-note arpeggio over each chord), tempo,
+	# and mood flags. Baked once into looping 16-bit PCM.
+	_music_tracks["title"] = _gen_music({
+		"bpm": 100.0, "roots": [60, 67, 57, 65],     # C  G  Am F  — calm major
+		"scale": [0, 4, 7, 12, 7, 4], "drum": false, "lead_db": -9.0,
+	})
+	_music_tracks["play"] = _gen_music({
+		"bpm": 132.0, "roots": [57, 65, 60, 67],     # Am F  C  G  — driving
+		"scale": [0, 3, 7, 12, 10, 7], "drum": true, "lead_db": -8.0,
+	})
+	_music_tracks["boss"] = _gen_music({
+		"bpm": 148.0, "roots": [57, 56, 55, 56],     # Am G#  G  G# — tense chromatic
+		"scale": [0, 3, 6, 7, 10, 12], "drum": true, "lead_db": -7.0, "dist": true,
+	})
+	for i in range(2):
+		var p := AudioStreamPlayer.new()
+		p.bus = "Master"
+		p.volume_db = -80.0
+		add_child(p)
+		_music_players.append(p)
+
+
+func _midi_freq(midi: int) -> float:
+	return 440.0 * pow(2.0, float(midi - MIDI_A4) / 12.0)
+
+
+func _gen_music(cfg: Dictionary) -> AudioStreamWAV:
+	var bpm: float = cfg["bpm"]
+	var roots: Array = cfg["roots"]
+	var scale: Array = cfg["scale"]
+	var use_drum: bool = cfg.get("drum", true)
+	var lead_gain := db_to_linear(float(cfg.get("lead_db", -8.0)))
+	var distort: bool = cfg.get("dist", false)
+
+	var beat := 60.0 / bpm
+	var beats_per_chord := 4
+	var total_beats := roots.size() * beats_per_chord
+	var dur := float(total_beats) * beat
+	var n := int(SAMPLE_RATE * dur)
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+
+	# 16th-note arpeggio: lead (square) + bass (triangle, one octave under root)
+	var step := beat / 4.0
+	var steps := int(dur / step)
+	for s in range(steps):
+		var t0 := float(s) * step
+		var chord_idx := int(t0 / (beat * float(beats_per_chord))) % roots.size()
+		var root: int = roots[chord_idx]
+		var deg: int = scale[s % scale.size()]
+		var lead_f := _midi_freq(root + 12 + deg)
+		var bass_f := _midi_freq(root - 12)
+		var i0 := int(t0 * SAMPLE_RATE)
+		var i1 := mini(n, int((t0 + step) * SAMPLE_RATE))
+		for i in range(i0, i1):
+			var t := float(i) / float(SAMPLE_RATE)
+			var nt := t - t0
+			var env := (1.0 - exp(-nt * 60.0)) * exp(-nt * 6.0)  # plucky
+			var lp := lead_f * t
+			var lead := (1.0 if fmod(lp, 1.0) < 0.5 else -1.0) * env * lead_gain
+			if distort:
+				lead = clampf(lead * 1.6, -1.0, 1.0)
+			var bp := bass_f * t
+			var tri := absf(fmod(bp, 1.0) * 4.0 - 2.0) - 1.0
+			buf[i] = clampf(buf[i] + lead + tri * 0.22, -1.0, 1.0)
+
+	if use_drum:
+		for b in range(total_beats):
+			var bt := float(b) * beat
+			_mix_kick(buf, bt)               # kick on every beat
+			_mix_hat(buf, bt + beat * 0.5)   # hi-hat on the off-beat
+
+	for i in range(n):
+		buf[i] = clampf(buf[i] * 0.8, -1.0, 1.0)
+
+	var wav := _make_wav(buf)
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = n
+	return wav
+
+
+func _mix_kick(buf: PackedFloat32Array, t0: float) -> void:
+	var n := buf.size()
+	var i0 := int(t0 * SAMPLE_RATE)
+	var dur := 0.12
+	var cnt := int(dur * SAMPLE_RATE)
+	var phase := 0.0
+	for k in range(cnt):
+		var i := i0 + k
+		if i < 0 or i >= n:
+			continue
+		var nt := float(k) / float(SAMPLE_RATE)
+		var env := exp(-nt * 24.0)
+		var freq := lerpf(140.0, 45.0, minf(1.0, nt / dur))
+		phase += TAU * freq / float(SAMPLE_RATE)
+		buf[i] = clampf(buf[i] + sin(phase) * env * 0.55, -1.0, 1.0)
+
+
+func _mix_hat(buf: PackedFloat32Array, t0: float) -> void:
+	var n := buf.size()
+	var i0 := int(t0 * SAMPLE_RATE)
+	var dur := 0.05
+	var cnt := int(dur * SAMPLE_RATE)
+	for k in range(cnt):
+		var i := i0 + k
+		if i < 0 or i >= n:
+			continue
+		var nt := float(k) / float(SAMPLE_RATE)
+		var env := exp(-nt * 90.0)
+		buf[i] = clampf(buf[i] + randf_range(-1.0, 1.0) * env * 0.14, -1.0, 1.0)
+
+
+# Cross-fade to a named track. No-op if it's already the current track.
+func play_music(track_name: String) -> void:
+	if _current_music == track_name or not _music_tracks.has(track_name):
+		return
+	_current_music = track_name
+	var outgoing := _music_players[_music_idx]
+	_music_idx = 1 - _music_idx
+	var incoming := _music_players[_music_idx]
+	incoming.stream = _music_tracks[track_name]
+	incoming.volume_db = -80.0
+	incoming.play()
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
+	_music_tween = create_tween().set_parallel(true)
+	_music_tween.tween_property(incoming, "volume_db", MUSIC_VOLUME_DB, MUSIC_FADE)
+	_music_tween.tween_property(outgoing, "volume_db", -80.0, MUSIC_FADE)
+
+
+func stop_music() -> void:
+	if _current_music == "":
+		return
+	_current_music = ""
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
+	_music_tween = create_tween().set_parallel(true)
+	for p in _music_players:
+		_music_tween.tween_property(p, "volume_db", -80.0, MUSIC_FADE)

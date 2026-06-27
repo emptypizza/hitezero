@@ -12,6 +12,7 @@ signal collider_debug_toggled(enabled: bool)
 signal speed_toggled(fast: bool)
 signal levelup_chosen(option_key: String)
 signal pause_toggled  # NEW-01: pause pill pressed (game_root owns the state)
+signal revive_requested  # game-over REVIVE button (coin continue)
 
 var hearts_row: HBoxContainer
 var knife_count_label: Label
@@ -22,6 +23,7 @@ var overlay_title: Label
 var overlay_info: Label
 var overlay_subinfo: Label
 var overlay_retry: Label
+var overlay_revive_btn: Button
 var collider_button: Button
 var collider_debug_on: bool = false
 var combo_label: Label
@@ -140,13 +142,16 @@ func show_stage_clear(next_level: int, heart_bonus: int) -> void:
 
 	# Wait one frame for layout, then bounce-in the title
 	await get_tree().process_frame
+	if _reduce_motion():
+		overlay_title.scale = Vector2.ONE
+		return
 	overlay_title.pivot_offset = overlay_title.size / 2.0
 	var tw := create_tween()
 	tw.tween_property(overlay_title, "scale", Vector2(1.2, 1.2), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(overlay_title, "scale", Vector2.ONE, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-func show_game_over(score: int, level: int, best_score: int) -> void:
+func show_game_over(score: int, level: int, best_score: int, best_stage: int = 0, revive_cost: int = 0, can_revive: bool = false) -> void:
 	overlay_root.visible = true
 	overlay_bg.color = Color(0.0, 0.0, 0.0, 0.82)
 	overlay_title.text = "GAME OVER"
@@ -156,28 +161,43 @@ func show_game_over(score: int, level: int, best_score: int) -> void:
 	overlay_retry.text = "Tap to retry"
 	overlay_retry.modulate = Color(0.86, 0.89, 0.95, 0.0)
 
-	# Panel drops from above
-	overlay_panel.position = Vector2(_PANEL_POS.x, -180.0)
-	var drop_tw := create_tween()
-	drop_tw.tween_property(overlay_panel, "position:y", _PANEL_POS.y, 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	# Coin-revive button: continue the same run when the player can afford it.
+	if can_revive:
+		overlay_revive_btn.visible = true
+		overlay_revive_btn.text = "REVIVE   %d coins" % revive_cost
+		overlay_revive_btn.modulate = Color(1.0, 0.85, 0.2, 1.0)
+	else:
+		overlay_revive_btn.visible = false
 
-	# Score count-up animation
-	var countup_tw := create_tween()
-	countup_tw.tween_method(
-		func(v: float) -> void: overlay_info.text = "Score: %d" % int(v),
-		0.0, float(score), 0.8
-	)
+	# Panel drops from above (snap into place under reduce-motion)
+	overlay_panel.position = Vector2(_PANEL_POS.x, -180.0)
+	if _reduce_motion():
+		overlay_panel.position = _PANEL_POS
+	else:
+		var drop_tw := create_tween()
+		drop_tw.tween_property(overlay_panel, "position:y", _PANEL_POS.y, 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+
+	# Score count-up animation (snap to final under reduce-motion)
+	if _reduce_motion():
+		overlay_info.text = "Score: %d" % score
+	else:
+		var countup_tw := create_tween()
+		countup_tw.tween_method(
+			func(v: float) -> void: overlay_info.text = "Score: %d" % int(v),
+			0.0, float(score), 0.8
+		)
 
 	# Best score / NEW BEST display
 	var is_new_best := score > 0 and score >= best_score
 	if is_new_best:
 		overlay_subinfo.text = "NEW BEST!"
 		overlay_subinfo.modulate = Color(1.0, 0.85, 0.0, 1.0)
-		var flash_tw := create_tween().set_loops(3)
-		flash_tw.tween_property(overlay_subinfo, "modulate:a", 0.25, 0.18)
-		flash_tw.tween_property(overlay_subinfo, "modulate:a", 1.0, 0.18)
+		if not _reduce_motion():
+			var flash_tw := create_tween().set_loops(3)
+			flash_tw.tween_property(overlay_subinfo, "modulate:a", 0.25, 0.18)
+			flash_tw.tween_property(overlay_subinfo, "modulate:a", 1.0, 0.18)
 	else:
-		overlay_subinfo.text = "Best: %d" % best_score
+		overlay_subinfo.text = "Best: %d   ·   Best Stage %d" % [best_score, best_stage]
 		overlay_subinfo.modulate = Color(0.86, 0.89, 0.95, 1.0)
 
 	# "Tap to retry" fades in after 1.5s
@@ -192,6 +212,8 @@ func hide_overlay() -> void:
 	overlay_title.scale = Vector2.ONE
 	overlay_retry.text = ""
 	overlay_retry.modulate.a = 0.0
+	if overlay_revive_btn != null:
+		overlay_revive_btn.visible = false
 	hide_boss_ui()
 	hide_levelup()
 
@@ -471,6 +493,9 @@ func _build_ui() -> void:
 
 	overlay_bg = ColorRect.new()
 	overlay_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Let game-over taps fall through to game_root._unhandled_input (restart);
+	# only the REVIVE button below consumes input, so button = revive, rest = restart.
+	overlay_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay_root.add_child(overlay_bg)
 
 	overlay_panel = PanelContainer.new()
@@ -513,6 +538,18 @@ func _build_ui() -> void:
 	overlay_subinfo.modulate = Color(0.86, 0.89, 0.95, 1.0)
 	_apply_font(overlay_subinfo, 9)
 	vbox.add_child(overlay_subinfo)
+
+	# Coin-revive button (shown on game-over only when affordable). It's the one
+	# overlay child that consumes input — taps elsewhere fall through to restart.
+	overlay_revive_btn = Button.new()
+	overlay_revive_btn.visible = false
+	overlay_revive_btn.focus_mode = Control.FOCUS_NONE
+	_apply_font(overlay_revive_btn, 9)
+	overlay_revive_btn.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		revive_requested.emit()
+	)
+	vbox.add_child(overlay_revive_btn)
 
 	overlay_retry = Label.new()
 	overlay_retry.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -664,10 +701,11 @@ func show_boss_warning(boss_name_text: String, color: Color) -> void:
 	boss_warning_label.scale = Vector2.ONE
 	boss_warning_label.pivot_offset = boss_warning_label.size / 2.0
 
-	# Flash animation
-	var tw := create_tween().set_loops(3)
-	tw.tween_property(boss_warning_label, "modulate:a", 0.2, 0.2)
-	tw.tween_property(boss_warning_label, "modulate:a", 1.0, 0.2)
+	# Flash animation (skip the looping blink under reduce-motion — photosensitivity)
+	if not _reduce_motion():
+		var tw := create_tween().set_loops(3)
+		tw.tween_property(boss_warning_label, "modulate:a", 0.2, 0.2)
+		tw.tween_property(boss_warning_label, "modulate:a", 1.0, 0.2)
 
 	# Fade out warning after 1.5s
 	var fade_tw := create_tween()
@@ -699,12 +737,14 @@ func show_boss_phase(new_phase: int) -> void:
 	boss_phase_label.visible = true
 	boss_phase_label.text = "PHASE %d" % new_phase
 	boss_phase_label.modulate = Color(1.0, 0.85, 0.0, 1.0)
-	boss_phase_label.scale = Vector2.ZERO
+	boss_phase_label.scale = Vector2.ONE
 	boss_phase_label.pivot_offset = boss_phase_label.size / 2.0
 
 	var tw := create_tween()
-	tw.tween_property(boss_phase_label, "scale", Vector2(1.2, 1.2), 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(boss_phase_label, "scale", Vector2.ONE, 0.1)
+	if not _reduce_motion():
+		boss_phase_label.scale = Vector2.ZERO
+		tw.tween_property(boss_phase_label, "scale", Vector2(1.2, 1.2), 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(boss_phase_label, "scale", Vector2.ONE, 0.1)
 	tw.tween_interval(0.8)
 	tw.tween_property(boss_phase_label, "modulate:a", 0.0, 0.3)
 	tw.tween_callback(func() -> void: boss_phase_label.visible = false)
@@ -743,10 +783,20 @@ func _on_collider_button_pressed() -> void:
 	collider_debug_toggled.emit(collider_debug_on)
 
 
+func _reduce_motion() -> bool:
+	# Screen Shake "Off" (shake_scale 0) also suppresses HUD juice — punch/flash/
+	# flip scaling and every looping blink — for motion-sensitive and
+	# photosensitive players. Mirrors how game_root gates camera shake on the
+	# same setting, so the accessibility toggle is honored end-to-end.
+	return Session.shake_scale <= 0.0
+
+
 func _punch_scale(node: Control) -> void:
 	if node == null:
 		return
 	node.scale = Vector2.ONE
+	if _reduce_motion():
+		return
 	var t := create_tween()
 	t.tween_property(node, "scale", Vector2(1.25, 1.25), 0.06).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(node, "scale", Vector2(1.0, 1.0), 0.06).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -754,6 +804,9 @@ func _punch_scale(node: Control) -> void:
 
 func _heart_flash() -> void:
 	if hearts_row == null:
+		return
+	if _reduce_motion():
+		hearts_row.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		return
 	var t := create_tween()
 	t.tween_property(hearts_row, "modulate", Color(1.0, 0.22, 0.22, 1.0), 0.05)
@@ -776,6 +829,10 @@ func _refresh_pill(collected: int, total: int) -> void:
 func _pill_flip() -> void:
 	# Counter-flip on collect (reference: skull pill flips 0/1 → 1/1 within a frame).
 	if pill_panel == null:
+		return
+	if _reduce_motion():
+		pill_panel.scale = Vector2.ONE
+		pill_panel.modulate = Color.WHITE
 		return
 	pill_panel.pivot_offset = pill_panel.size * 0.5
 	pill_panel.scale = Vector2.ONE

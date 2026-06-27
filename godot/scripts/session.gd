@@ -188,6 +188,16 @@ func add_coins(amount: int) -> void:
 	_mark_dirty()
 
 
+# Spend coins if affordable (e.g. game-over revive). Returns false (no charge)
+# when the balance is too low.
+func try_spend_coins(amount: int) -> bool:
+	if amount <= 0 or coins < amount:
+		return false
+	coins -= amount
+	_mark_dirty()
+	return true
+
+
 func get_upgrade_level(key: String) -> int:
 	match key:
 		"knife": return upgrade_knife
