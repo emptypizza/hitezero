@@ -126,14 +126,14 @@ func update_boss(delta: float) -> void:
 	queue_redraw()
 
 
-func take_hit(hit_pos: Vector2) -> int:
+func take_hit(hit_pos: Vector2, damage: int = 1) -> int:
 	if _defeated:
 		return hp
-	var dmg := 1
+	var dmg := damage
 	# Weak point check: 2x damage
 	var weak_pos := position + _weak_point_offset
 	if hit_pos.distance_to(weak_pos) <= _weak_point_radius:
-		dmg = 2
+		dmg = damage * 2
 	hp = maxi(0, hp - dmg)
 	_flash_amount = 1.0
 	if hp <= 0:
@@ -178,7 +178,7 @@ func get_all_hitboxes() -> Array[Rect2]:
 	return result
 
 
-func hit_mirror_block(hit_pos: Vector2) -> bool:
+func hit_mirror_block(hit_pos: Vector2, damage: int = 1) -> bool:
 	if boss_type != GameConstants.BossType.MIRROR:
 		return false
 	for i in range(_mirror_blocks.size()):
@@ -187,7 +187,7 @@ func hit_mirror_block(hit_pos: Vector2) -> bool:
 			continue
 		var mpos := Vector2(float(mb["x"]), float(mb["y"]))
 		if hit_pos.distance_to(mpos) < 22.0:
-			mb["hp"] = int(mb["hp"]) - 1
+			mb["hp"] = maxi(0, int(mb["hp"]) - damage)
 			_mirror_blocks[i] = mb
 			return true
 	return false
@@ -202,9 +202,16 @@ func _check_phase_transition() -> void:
 		if hp_pct <= phase_thresholds[i]:
 			new_phase = i + 2
 	if new_phase > phase:
-		phase = new_phase
 		_phase_transition_cooldown = 1.0
-		_on_phase_change()
+		# Advance one phase at a time so each intermediate phase's setup runs.
+		# A single hit (esp. 2x weak-point damage or a big damage build) can drop
+		# HP past both 0.66 and 0.33 in one frame; jumping straight to the final
+		# phase would permanently skip the middle phase's _on_phase_change()
+		# (Splitter segments, Spawner shield, Mirror respawn) and desync win checks.
+		while phase < new_phase:
+			phase += 1
+			_on_phase_change()
+		# Emit once for the final phase so the warning VFX/SFX/HUD fire a single time.
 		phase_changed.emit(phase)
 
 
@@ -385,10 +392,10 @@ func _spawn_spawner_wave() -> void:
 		minion_spawn_requested.emit(Vector2(spawn_x, spawn_y), 1 + phase)
 
 
-func take_spawner_shield_hit() -> bool:
+func take_spawner_shield_hit(damage: int = 1) -> bool:
 	if not _spawner_shield_active:
 		return false
-	_spawner_shield_hp -= 1
+	_spawner_shield_hp -= damage
 	if _spawner_shield_hp <= 0:
 		_spawner_shield_active = false
 		_pattern_timer = 0.0
@@ -446,7 +453,7 @@ func _spawn_split_segment(x: float, y: float, seg_size: float, seg_hp: int) -> v
 	_split_count += 1
 
 
-func hit_split_segment(hit_pos: Vector2) -> bool:
+func hit_split_segment(hit_pos: Vector2, damage: int = 1) -> bool:
 	for i in range(_split_segments.size()):
 		var seg := _split_segments[i]
 		if int(seg["hp"]) <= 0:
@@ -454,7 +461,7 @@ func hit_split_segment(hit_pos: Vector2) -> bool:
 		var s := float(seg["size"])
 		var spos := Vector2(float(seg["x"]), float(seg["y"]))
 		if hit_pos.distance_to(spos) < s * 0.6:
-			_split_segments[i]["hp"] = int(seg["hp"]) - 1
+			_split_segments[i]["hp"] = maxi(0, int(seg["hp"]) - damage)
 			return true
 	return false
 
