@@ -16,6 +16,7 @@ func _ready() -> void:
 	_clear_web_bridge_state()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_layout()
+	AudioManager.play_music("title")
 
 
 func _clear_web_bridge_state() -> void:
@@ -260,9 +261,11 @@ func _build_modal() -> void:
 		label.add_theme_font_size_override("font_size", 14)
 		modal_vbox.add_child(label)
 
-	# P6: reduce-motion / screen-shake intensity toggle (accessibility), persisted.
+	# P6: reduce-motion toggle (accessibility), persisted. Controls camera shake
+	# AND all HUD juice (punch/flash/flip/blinks), so it's labeled "Motion" rather
+	# than "Screen Shake" to set the right expectation.
 	var shake_label := func(v: float) -> String:
-		return "Screen Shake:  %s" % ("Full" if v > 0.75 else ("Low" if v > 0.25 else "Off"))
+		return "Motion:  %s" % ("Full" if v > 0.75 else ("Low" if v > 0.25 else "Off"))
 	var shake_btn := Button.new()
 	shake_btn.text = shake_label.call(Session.shake_scale)
 	shake_btn.custom_minimum_size = Vector2(0.0, 38.0)

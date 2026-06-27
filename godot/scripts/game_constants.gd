@@ -17,6 +17,10 @@ const LEVEL_START_Y := TOP_BAR_HEIGHT + 24.0
 const SPAWN_INTERVAL := 0.066
 const HEARTS_MAX := 3
 const KNIFE_RADIUS := 5.0
+# Coin-revive: spend coins at game-over to continue the SAME run instead of
+# resetting to stage 1. Cost scales with each revive used in the run.
+const REVIVE_BASE_COST := 300   # cost of the 1st revive; ×(revives+1) thereafter
+const REVIVE_KNIVES := 3        # knives granted on revive so the run can continue
 
 enum GameState {
     AIMING,

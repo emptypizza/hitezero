@@ -12,7 +12,7 @@ const BossScript = preload("res://scripts/boss.gd")
 
 signal ui_updated(data: Dictionary)
 signal stage_cleared(next_level: int, heart_bonus: int)
-signal game_overed(score: int, level: int, best_score: int)
+signal game_overed(score: int, level: int, best_score: int, best_stage: int, revive_cost: int, can_revive: bool)
 signal overlay_reset
 signal boss_started(boss_name: String, boss_color: Color)
 signal boss_hp_updated(hp: int, max_hp: int)
@@ -91,6 +91,7 @@ var group_dmg_bonus: int = 0             # from group-kill stacks
 var run_speed_mult: float = 1.0
 var run_tray_bonus: float = 0.0
 var run_buffs: Dictionary = {}           # buff key -> remaining seconds
+var revive_count: int = 0                # coin-revives used this run (cost scales)
 var _burst_destroy_count: int = 0        # destroys inside the group-kill window
 var _burst_destroy_timer: float = 0.0
 var firefly_particles: Array[Dictionary] = []
@@ -146,6 +147,7 @@ func _ready() -> void:
 	boss_hp_updated.connect(hud.update_boss_hp)
 	boss_phase_changed.connect(hud.show_boss_phase)
 	boss_defeated_signal.connect(hud.show_boss_defeated)
+	hud.revive_requested.connect(revive)
 
 	_create_flash_overlay()
 	_create_vignette()
@@ -375,6 +377,7 @@ func _start_new_run() -> void:
 	run_speed_mult = 1.0
 	run_tray_bonus = 0.0
 	run_buffs.clear()
+	revive_count = 0
 	_burst_destroy_count = 0
 	_burst_destroy_timer = 0.0
 	levelup_open = false
@@ -886,6 +889,7 @@ func _trigger_game_over() -> void:
 	Session.submit_run(score, level, combo_best)
 	Session.add_coins(100 * level)
 	AudioManager.play("game_over")
+	AudioManager.stop_music()
 	_emit_ui_update()
 	_run_game_over_sequence()
 
@@ -907,7 +911,51 @@ func _run_game_over_sequence() -> void:
 	await get_tree().create_timer(0.1, true, false, true).timeout
 	if state != GameConstants.GameState.GAME_OVER:
 		return
-	game_overed.emit(score, level, Session.best_score)
+	game_overed.emit(score, level, Session.best_score, Session.best_stage, _get_revive_cost(), _can_revive())
+
+
+func _get_revive_cost() -> int:
+	# First revive costs the base; each subsequent one in the same run costs more.
+	return GameConstants.REVIVE_BASE_COST * (revive_count + 1)
+
+
+func _can_revive() -> bool:
+	return Session.coins >= _get_revive_cost()
+
+
+# Coin-revive: continue the SAME run/stage instead of resetting to stage 1.
+# Wired to hud.revive_requested (the game-over REVIVE button).
+func revive() -> void:
+	if state != GameConstants.GameState.GAME_OVER:
+		return
+	if not Session.try_spend_coins(_get_revive_cost()):
+		return
+	revive_count += 1
+
+	# Undo the game-over sequence's slow-mo + desaturation.
+	Engine.time_scale = 1.0
+	world.modulate = Color.WHITE
+	hit_reaction_remaining = 0.0
+	hitstop_remaining = 0.0
+	player.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	player.set_state("idle")
+
+	# Give a fighting chance: 1 heart + a fresh batch of knives. Covers both the
+	# "hearts ran out" and "knives ran out / stuck" game-over paths.
+	hearts = maxi(1, hearts)
+	knife_count = maxi(knife_count, GameConstants.REVIVE_KNIVES)
+
+	# If the boss had descended to the kill line, nudge it back up so the player
+	# isn't instantly re-killed on the next frame.
+	if current_boss != null and is_instance_valid(current_boss) and not current_boss.is_defeated():
+		var kill_y := GameConstants.CANVAS_HEIGHT - 40.0 - current_boss.get_body_size().y * 0.5
+		if current_boss.position.y > kill_y - 80.0:
+			current_boss.position.y = kill_y - 80.0
+
+	hud.hide_overlay()
+	state = GameConstants.GameState.AIMING
+	AudioManager.play_music("boss" if is_boss_stage else "play")
+	_emit_ui_update()
 
 
 func _play_hit_reaction() -> void:
@@ -1648,6 +1696,7 @@ func _blast_aoe(center: Vector2, radius: float) -> void:
 func _init_boss_if_needed() -> void:
 	is_boss_stage = LevelGen.is_boss_stage(level)
 	if not is_boss_stage:
+		AudioManager.play_music("play")  # back to normal track (no-op if already playing)
 		return
 
 	var boss_type := LevelGen.get_boss_type(level)
@@ -1665,6 +1714,7 @@ func _init_boss_if_needed() -> void:
 	boss_started.emit(current_boss.boss_name, current_boss.boss_color)
 	_flash_screen(Color(1.0, 0.15, 0.15, 1.0), 0.35, 0.3)
 	AudioManager.play("enemy_warning")
+	AudioManager.play_music("boss")
 
 
 func _cleanup_boss() -> void:
