@@ -5,33 +5,46 @@ const GameConstants = preload("res://scripts/game_constants.gd")
 const TEX_TRAY: Texture2D = preload("res://assets/textures/player/tray.png")
 const TEX_KNIFE: Texture2D = preload("res://assets/textures/knife/knife.png")
 
+# CHARRR-01 (pixel-art neon hero, 2026-06-28) ───────────────────────────────
+# The protagonist is now a 96×96 chibi pixel-art maid with a baked-in green neon
+# rim light, so she reads as "the player" and pops off the dark stage on her own
+# — no cel/rim shader needed (it would smear the crisp pixels and fight the green
+# rim). The whole ANIM-01 procedural rig (breathing, squash→stretch, recoil, aim
+# lean, muzzle VFX) is kept verbatim on top; only the texture sets + fit/scale
+# change. Frame sets:
+#   idle01-06 = breathing loop, 05 is the eyes-closed blink (index 4)
+#   move01-05 = forward throw-lunge, driven over OUTPUT_DURATION on each shot
 const TEX_IDLE_FRAMES = [
-	preload("res://assets/textures/player/maid/idle_0.png"),
-	preload("res://assets/textures/player/maid/idle_1.png"),
-	preload("res://assets/textures/player/maid/idle_2.png"),
-	preload("res://assets/textures/player/maid/idle_3.png"),
-	preload("res://assets/textures/player/maid/idle_4.png"),
+	preload("res://assets/textures/player/charrr/idle01.png"),
+	preload("res://assets/textures/player/charrr/idle02.png"),
+	preload("res://assets/textures/player/charrr/idle03.png"),
+	preload("res://assets/textures/player/charrr/idle04.png"),
+	preload("res://assets/textures/player/charrr/idle05.png"),
+	preload("res://assets/textures/player/charrr/idle06.png"),
 ]
 const TEX_ATTACK_FRAMES = [
-	preload("res://assets/textures/player/maid/attack_0.png"),
-	preload("res://assets/textures/player/maid/attack_1.png"),
-	preload("res://assets/textures/player/maid/attack_2.png"),
-	preload("res://assets/textures/player/maid/attack_3.png"),
-	preload("res://assets/textures/player/maid/attack_4.png"),
+	preload("res://assets/textures/player/charrr/move01.png"),
+	preload("res://assets/textures/player/charrr/move02.png"),
+	preload("res://assets/textures/player/charrr/move03.png"),
+	preload("res://assets/textures/player/charrr/move04.png"),
+	preload("res://assets/textures/player/charrr/move05.png"),
 ]
-const TEX_COMBAT_IDLE: Texture2D = preload("res://assets/textures/player/maid/combat_idle.png")
-const TEX_GAMEOVER_DOWN: Texture2D = preload("res://assets/textures/player/maid/gameover_down.png")
+# Coiled "ready" stance held between shots while knives are still in flight.
+const TEX_COMBAT_IDLE: Texture2D = preload("res://assets/textures/player/charrr/move01.png")
+# Defeated read: eyes-closed blink frame, desaturated + slumped by the rig.
+const TEX_GAMEOVER_DOWN: Texture2D = preload("res://assets/textures/player/charrr/idle05.png")
 
-# CEL-04: shared cel+rim material so the maid reads in the same render language
-# as the blocks (banded shade + ink rim + stage rim light). Alpha-keyed in the
-# shader, so the hand-drawn silhouette is untouched.
-const CHARACTER_CEL_SHADER: Shader = preload("res://assets/shaders/character_cel.gdshader")
-static var _character_material: ShaderMaterial = null
-
-const IDLE_FRAME_ORDER = [0, 1, 2, 3, 4, 3, 2, 1]
-const BASE_BODY_POSITION := Vector2(0.0, -33.0)
+# Breathing loop indices: gentle 0↔3 sway (open-eyed inhale/exhale) with a single
+# blink (4) per cycle, bookended by the low frame (5). ~2.3 s at 7 fps.
+const IDLE_FRAME_ORDER = [0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1, 0, 5, 4, 5]
+const BASE_BODY_POSITION := Vector2(0.0, -56.0)
 const BASE_TRAY_POSITION := Vector2(0.0, -78.0)
-const MAID_TARGET_HEIGHT := 124.0
+# All hero frames share one 96 px authoring canvas (feet bottom-aligned, body
+# centred), so a single uniform scale keeps her size rock-steady across swaps.
+# Integer 2.0× → crispest pixels and a ~140 px visible hero (head≈520 / feet≈660
+# in design space at paddle_y=620), matching the old maid's on-screen footprint.
+const CHAR_AUTHOR_FRAME := 96.0
+const CHAR_RENDER_SCALE := 2.0
 const OUTPUT_DURATION := 0.52
 # Hot-flash window follows the duck-flock reference spec (GameConstants.FLASH_LIFE):
 # muzzle glow lives 1–2 frames, the blade trail/particles carry the follow-through.
@@ -79,9 +92,9 @@ func _ready() -> void:
 	tray.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	body.centered = true
 	body.position = BASE_BODY_POSITION
-	# CEL-04: apply the shared cel+rim material once; it persists across the
-	# per-frame texture swaps in _refresh_visual().
-	body.material = _get_character_material()
+	# CHARRR-01: no shader — the pixel-art hero ships her own baked green rim, and
+	# nearest-filtered crisp pixels read best with no cel/ink post-process.
+	body.material = null
 	if output_vfx != null and output_vfx.has_method("bind_player"):
 		output_vfx.bind_player(self)
 	_refresh_visual()
@@ -139,13 +152,6 @@ func play_output(shot_angle: float) -> void:
 	_queue_output_vfx_redraw()
 
 
-static func _get_character_material() -> ShaderMaterial:
-	if _character_material == null:
-		_character_material = ShaderMaterial.new()
-		_character_material.shader = CHARACTER_CEL_SHADER
-	return _character_material
-
-
 func _is_output_active() -> bool:
 	return output_elapsed < OUTPUT_DURATION
 
@@ -170,21 +176,19 @@ func _fit_body_scale() -> void:
 	if body.texture == null:
 		return
 	var ts := body.texture.get_size()
-	if ts.y < 1.0 or ts.x < 1.0:
+	if ts.x < 1.0:
 		return
-	var raw_scale: float
-	if ts.y > 120.0:
-		raw_scale = MAID_TARGET_HEIGHT / ts.y
-	else:
-		raw_scale = 56.0 / ts.x
-	body.scale = Vector2(raw_scale, raw_scale)
+	# CHARRR-01: every hero frame shares the 96 px authoring canvas, so normalise
+	# to it and apply one render scale — no per-frame size jitter on texture swaps.
+	var s := CHAR_RENDER_SCALE * (CHAR_AUTHOR_FRAME / ts.x)
+	body.scale = Vector2(s, s)
 
 
 func _sync_body_texture_filter() -> void:
 	if body.texture == null:
 		return
-	var ts := body.texture.get_size()
-	body.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR if ts.y > 120.0 else CanvasItem.TEXTURE_FILTER_NEAREST
+	# Crisp pixel art at every state — never linear-smooth the hero.
+	body.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 func _refresh_visual() -> void:
