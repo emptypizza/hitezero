@@ -1686,7 +1686,7 @@ func _check_boss_collision(knife: Knife) -> void:
 				continue
 			var mpos := Vector2(float(mb["x"]), float(mb["y"]))
 			if knife.position.distance_to(mpos) <= knife.radius + 18.0:
-				current_boss.hit_mirror_block(knife.position)
+				current_boss.hit_mirror_block(knife.position, _get_knife_damage())
 				_register_combo_hit()
 				_burst_feedback(mpos, Color(0.6, 0.8, 1.0, 0.9), 14.0, 0.18)
 				_spawn_hit_vfx(mpos, Color(0.6, 0.8, 1.0))
@@ -1707,7 +1707,7 @@ func _check_boss_collision(knife: Knife) -> void:
 		var body_rect := current_boss.get_body_rect()
 		var shield_r := maxf(body_rect.size.x, body_rect.size.y) * 0.5 + 10.0
 		if knife.position.distance_to(current_boss.position) <= knife.radius + shield_r:
-			current_boss.take_spawner_shield_hit()
+			current_boss.take_spawner_shield_hit(_get_knife_damage())
 			_register_combo_hit()
 			_burst_feedback(knife.position, Color(1.0, 0.4, 0.3, 0.8), 12.0, 0.14)
 			AudioManager.play("block_hit", _combo_pitch())
@@ -1727,7 +1727,7 @@ func _check_boss_collision(knife: Knife) -> void:
 
 	# Check splitter segments
 	if current_boss.boss_type == GameConstants.BossType.SPLITTER:
-		if current_boss.hit_split_segment(knife.position):
+		if current_boss.hit_split_segment(knife.position, _get_knife_damage()):
 			_register_combo_hit()
 			_burst_feedback(knife.position, Color(0.85, 0.6, 0.2, 0.9), 12.0, 0.16)
 			_spawn_hit_vfx(knife.position, Color(0.85, 0.55, 0.15))
@@ -1751,7 +1751,7 @@ func _check_boss_collision(knife: Knife) -> void:
 	var dist := knife.position.distance_to(Vector2(test_x, test_y))
 
 	if dist <= knife.radius:
-		var remaining := current_boss.take_hit(knife.position)
+		var remaining := current_boss.take_hit(knife.position, _get_knife_damage())
 		_register_combo_hit()
 		_burst_feedback(knife.position, current_boss.boss_color, 14.0, 0.18)
 		_spawn_hit_vfx(knife.position, current_boss.boss_color)
